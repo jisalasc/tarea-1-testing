@@ -26,44 +26,24 @@
 - Mejorer: opcional, si es bajo el mutation coverage hay que analizar por que
 - Finalizar: escrubir el json de metricas (metric.json) debe pasar lo que dice enunciado sino no se corrige
 
-
-### Consideraciones claude
-
-- `agent.py` recibe exactamente 2 parámetros: ruta del archivo objetivo y carpeta de salida. No hay `project_folder`; la carpeta del proyecto se deduce como el directorio padre del archivo, y la raíz (`Public_Proyects/`) como el padre de esa.
-- El archivo de test se llama `test_<nombre_archivo_sin_.py>.py` (ej. `test_string_processing.py`), sin importar cuántas clases tenga el archivo.
-- Los evaluadores corren pytest **desde** `Results/<proyecto>/<archivo>/`. Por eso el test lleva una cabecera generada por el agente que sube desde su propia ubicación (y desde el cwd como respaldo) hasta encontrar `Public_Proyects/<proyecto>/`, y agrega esa carpeta y la raíz a `sys.path`. No dependemos de `PYTHONPATH` ni de rutas absolutas.
-- `agent.py` calcula y escribe `metrics.json` (`line_coverage`, `branch_coverage`, `mutation_score`). Es responsabilidad del agente, no de un harness externo.
-- Solo `google-genai` con `gemini-3.1-flash-lite`.
-- Un 503 es cola de alta demanda: se reintenta con backoff. Un 504 hay que evitarlo: prompts acotados y timeout propio más corto que el del gateway.
-- Presupuesto duro de 2 minutos por corrida, incluyendo LLM, pytest, coverage y cosmic-ray.
-- Un test trivial (o inexistente) no da puntaje. El respaldo de emergencia existe solo para que el archivo compile; el puntaje real depende de que el camino con LLM funcione.
-- Se puede modificar `run_all.sh`. Ya está corregido el typo `tabeformat.py` → `tableformat.py` y usa `${PYTHON:-python3}` para poder apuntar al venv de Python 3.14.
-- **Watchdog de streaming:** las llamadas usan streaming. El timeout del SDK (≈12 s) actúa como máximo silencio entre chunks (incluido el primero), y un reloj propio corta la llamada completa a los ≈35 s. Ante corte, 429 o 5xx se reintenta con backoff acotado por el tiempo restante.
-- **Imports deterministas:** el agente prueba en un subproceso si el módulo se importa como paquete (`blackjack.dealer`) o plano (`dealer`) y le dice al LLM la línea exacta de import. El LLM tiene prohibido tocar `sys.path`; si lo hace, esas líneas se eliminan al ensamblar el archivo.
-- **Cosmic-ray (pieza 3, medido 2026-09-22):** toml generado por corrida con `module-path` apuntando solo al archivo objetivo (el toml base tiene formato obsoleto para cosmic-ray 8.7 y con `module-path = "."` mutaría todo). `init` lista los mutantes; `exec` se lanza con `Popen` y se corta al agotarse el presupuesto. Mediciones: `blackjack/dealer.py` genera 28 mutantes a 0.17 s cada uno; `svm/svm.py` genera 584 a 0.43 s cada uno (≈4 min completo), así que en 30 a 40 s se evalúan 60 a 90 mutantes. Como cosmic-ray entrega los pendientes con `ORDER BY random()`, los completados al cortar son una muestra aleatoria. Score como `cr-report`: `1 - survived / completados`. El `test-command` usa pytest `-x` para que los mutantes muertos cuesten menos.
-- **Corte con SIGINT y snapshot del objetivo (desviación justificada del "sin snapshots").** Comprobado en la primera prueba: cortar `exec` con timeout de `subprocess.run` (SIGKILL) o con SIGTERM deja el archivo objetivo **mutado en disco**, porque el `finally` de cosmic-ray no corre. Solo SIGINT (`KeyboardInterrupt`) lo restaura. Por eso el corte es con SIGINT, y además se guardan los bytes del objetivo antes y se restauran si el hash cambió. Modificar los proyectos públicos viola una regla del enunciado, así que esta red de seguridad no es opcional.
-- Si no queda presupuesto para cosmic-ray (menos de 8 s), se reporta `mutation_score = 0.0` y queda registrado en la bitácora. `metrics.json` mantiene estrictamente las 3 llaves; el detalle (mutantes totales, completados, si fue muestra) va en `.agent_work/metrics_detail.json`.
-- **Módulos:** `agent.py` (orquestador), `extractor.py` (contexto e imports), `llm.py` (cliente con watchdog y reintentos), `runners.py` (pytest, coverage, cosmic-ray), `prompts.py` (plantillas).
-
-
-### Presupuestos y valores numéricos (fuente de verdad: constantes en el código)
-
-Reloj único: 120 s desde que arranca `main`. Cada fase recibe lo que sobra, con tope y mínimo. Orden de prioridad: tests que corran, luego métricas.
+### Presupuestos de tiempo actuales
+Todas cambiables y discutibles, en mi compu se corren bien
+Reloj único: 120 s desde que parte main
 
 | Qué | Valor | Dónde |
 |---|---|---|
-| Presupuesto total | 120 s | `agent.py` `BUDGET_SECONDS` |
-| Reserva para escribir salidas | 8 s | `FINALIZE_RESERVE` |
+| total | 120 s | `BUDGET_SECONDS` |
+| Reservado para escribir | 8 s | `FINALIZE_RESERVE` |
 | Mínimo para intentar otra ronda de reparación (LLM + pytest) | 20 s | `MIN_SECONDS_FOR_LLM_CYCLE` |
-| Rondas de reparación máximas | 2 | `MAX_REPAIR_ROUNDS` |
+| Rondas max | 2 | `MAX_REPAIR_ROUNDS` |
 | Temperatura: generación / reparación 1 / reparación 2 | 0.3 / 0.3 / 0.6 | `REPAIR_TEMPERATURES` |
 | Cosmic-ray: tope y mínimo | 40 s / 8 s | `MAX_MUTATION_SECONDS`, `MIN_MUTATION_SECONDS` |
 
-**Llamadas al LLM** (`llm.py`):
+**Llamadas LLM** :
 
 | Qué | Valor |
 |---|---|
-| Watchdog: máximo silencio antes del primer chunk y entre chunks | 9 s |
+| Watchdog: claude dijo esto entre chunks | 9 s |
 | Tope total por llamada | 35 s (y `X-Server-Timeout` = 35) |
 | Intentos máximos por llamada | 4 |
 | Mínimo de tiempo restante para iniciar un intento | 10 s |
@@ -85,6 +65,25 @@ Reloj único: 120 s desde que arranca `main`. Cada fase recibe lo que sobra, con
 | Prueba de import en subproceso | 20 s |
 
 Tiempos medidos (2026-09-22): llamada al LLM en buen clima 5 a 10 s; pytest de un archivo verde 0.2 a 0.6 s; coverage 0.3 s; un mutante 0.17 a 0.43 s.
+
+### Consideraciones claude
+
+- `agent.py` recibe exactamente 2 parámetros: ruta del archivo objetivo y carpeta de salida. No hay `project_folder`; la carpeta del proyecto se deduce como el directorio padre del archivo, y la raíz (`Public_Proyects/`) como el padre de esa.
+- El archivo de test se llama `test_<nombre_archivo_sin_.py>.py` (ej. `test_string_processing.py`), sin importar cuántas clases tenga el archivo.
+- Los evaluadores corren pytest **desde** `Results/<proyecto>/<archivo>/`. Por eso el test lleva una cabecera generada por el agente que sube desde su propia ubicación (y desde el cwd como respaldo) hasta encontrar `Public_Proyects/<proyecto>/`, y agrega esa carpeta y la raíz a `sys.path`. No dependemos de `PYTHONPATH` ni de rutas absolutas.
+- `agent.py` calcula y escribe `metrics.json` (`line_coverage`, `branch_coverage`, `mutation_score`). Es responsabilidad del agente, no de un harness externo.
+- Solo `google-genai` con `gemini-3.1-flash-lite`.
+- Un 503 es cola de alta demanda: se reintenta con backoff. Un 504 hay que evitarlo: prompts acotados y timeout propio más corto que el del gateway.
+- Presupuesto duro de 2 minutos por corrida, incluyendo LLM, pytest, coverage y cosmic-ray.
+- Un test trivial (o inexistente) no da puntaje. El respaldo de emergencia existe solo para que el archivo compile; el puntaje real depende de que el camino con LLM funcione.
+- Se puede modificar `run_all.sh`. Ya está corregido el typo `tabeformat.py` → `tableformat.py` y usa `${PYTHON:-python3}` para poder apuntar al venv de Python 3.14.
+- **Watchdog de streaming:** las llamadas usan streaming. El timeout del SDK (≈12 s) actúa como máximo silencio entre chunks (incluido el primero), y un reloj propio corta la llamada completa a los ≈35 s. Ante corte, 429 o 5xx se reintenta con backoff acotado por el tiempo restante.
+- **Imports deterministas:** el agente prueba en un subproceso si el módulo se importa como paquete (`blackjack.dealer`) o plano (`dealer`) y le dice al LLM la línea exacta de import. El LLM tiene prohibido tocar `sys.path`; si lo hace, esas líneas se eliminan al ensamblar el archivo.
+- **Cosmic-ray (pieza 3, medido 2026-09-22):** toml generado por corrida con `module-path` apuntando solo al archivo objetivo (el toml base tiene formato obsoleto para cosmic-ray 8.7 y con `module-path = "."` mutaría todo). `init` lista los mutantes; `exec` se lanza con `Popen` y se corta al agotarse el presupuesto. Mediciones: `blackjack/dealer.py` genera 28 mutantes a 0.17 s cada uno; `svm/svm.py` genera 584 a 0.43 s cada uno (≈4 min completo), así que en 30 a 40 s se evalúan 60 a 90 mutantes. Como cosmic-ray entrega los pendientes con `ORDER BY random()`, los completados al cortar son una muestra aleatoria. Score como `cr-report`: `1 - survived / completados`. El `test-command` usa pytest `-x` para que los mutantes muertos cuesten menos.
+- **Corte con SIGINT y snapshot del objetivo (desviación justificada del "sin snapshots").** Comprobado en la primera prueba: cortar `exec` con timeout de `subprocess.run` (SIGKILL) o con SIGTERM deja el archivo objetivo **mutado en disco**, porque el `finally` de cosmic-ray no corre. Solo SIGINT (`KeyboardInterrupt`) lo restaura. Por eso el corte es con SIGINT, y además se guardan los bytes del objetivo antes y se restauran si el hash cambió. Modificar los proyectos públicos viola una regla del enunciado, así que esta red de seguridad no es opcional.
+- Si no queda presupuesto para cosmic-ray (menos de 8 s), se reporta `mutation_score = 0.0` y queda registrado en la bitácora. `metrics.json` mantiene estrictamente las 3 llaves; el detalle (mutantes totales, completados, si fue muestra) va en `.agent_work/metrics_detail.json`.
+- **Módulos:** `agent.py` (orquestador), `extractor.py` (contexto e imports), `llm.py` (cliente con watchdog y reintentos), `runners.py` (pytest, coverage, cosmic-ray), `prompts.py` (plantillas).
+
 
 ### Ambigüedades pendientes
 
