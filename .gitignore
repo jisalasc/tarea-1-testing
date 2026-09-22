@@ -1,0 +1,12 @@
+# secretos
+T1_base/.env
+# entorno
+T1_base/.venv/
+__pycache__/
+*.pyc
+# artefactos de herramientas
+.coverage
+.coverage.*
+*.sqlite
+.pytest_cache/
+T1_base/Results/**/.agent_work/
