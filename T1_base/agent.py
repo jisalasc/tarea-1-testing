@@ -298,11 +298,30 @@ def main(ruta_archivo: str, output_folder: str) -> int:
                 pr = write_and_validate(code, "emergency")
                 outcome = "emergency"
 
-    # ---- MEASURE -----------------------------------------------------------
+    # ---- MEASURE & ENHANCE -------------------------------------------------
     cov = runners.run_coverage(test_path, cwd=output_folder, target_file=target.file_path, work_dir=work_dir)
-    log.add("measure", lines=f"{cov.line_coverage:.1%}", branches=f"{cov.branch_coverage:.1%}",
+    log.add("measure_initial", lines=f"{cov.line_coverage:.1%}", branches=f"{cov.branch_coverage:.1%}",
             missing_lines=len(cov.missing_lines), secs=round(cov.duration, 1),
             error=cov.error[:80] if cov.error else "")
+
+    # Si no cumple el umbral y queda tiempo, pedimos tests adicionales
+    if (cov.line_coverage < 0.80 or cov.branch_coverage < 0.50) and remaining() > MIN_SECONDS_FOR_LLM_CYCLE:
+        log.add("enhance", detail="Cobertura bajo umbral. Solicitando nuevos tests al LLM...")
+        new_tests = call_llm(prompts.enhance_prompt(target, code, cov.missing_lines), "enhance", temperature=0.4)
+        
+        if new_tests:
+            enhanced_code = code.rstrip() + "\n\n" + new_tests.strip() + "\n"
+            pr_enhance = write_and_validate(enhanced_code, "enhance_validate")
+            
+            if pr_enhance.ok:
+                code, pr = enhanced_code, pr_enhance
+                outcome = "green_after_enhance"
+                # Volvemos a medir para actualizar metrics.json con el resultado mejorado
+                cov = runners.run_coverage(test_path, cwd=output_folder, target_file=target.file_path, work_dir=work_dir)
+                log.add("measure_final", lines=f"{cov.line_coverage:.1%}", branches=f"{cov.branch_coverage:.1%}")
+            else:
+                log.add("enhance_reject", detail="Los tests adicionales fallaron. Revirtiendo cambios.")
+                write_and_validate(code, "rollback")
 
     # ---- MUTATE ------------------------------------------------------------
     mut = runners.MutationResult()

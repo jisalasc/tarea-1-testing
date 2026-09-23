@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Carpetas base
-BASE_DIR="Public_Proyects"
+BASE_DIR="Public_Projects"
 OUTPUT_BASE="Results"
 
 # Definir los proyectos y sus respectivos archivos usando un diccionario (array asociativo)

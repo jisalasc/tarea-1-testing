@@ -124,13 +124,28 @@ Return ONLY one ```python code block with the COMPLETE corrected test module (al
 """
 
 # ---------------------------------------------------------------------------
-# (pieza 3)
+# Mejora de Cobertura (pieza 3)
 # ---------------------------------------------------------------------------
 
-# def enhance_prompt(t: Target, test_code: str, missing_lines: list[int]) -> str:
-#     return f"""You are an expert Python test engineer. The following test suite works and passes, but it lacks coverage.
-# Your goal is to WRITE ADDITIONAL TESTS to cover the missing lines.
+def enhance_prompt(t: Target, test_code: str, missing_lines: list[int]) -> str:
+    return f"""You are an expert Python test engineer. The following test suite works and passes, but it lacks coverage.
+Your goal is to WRITE ADDITIONAL TESTS to cover the missing lines.
 
-# ## Target module: `{t.project_name}/{t.module_name}.py`
-# ```python
-# {t.source.rstrip()}
+## Target module: `{t.project_name}/{t.module_name}.py`
+```python
+{t.source.rstrip()}
+```
+
+## Current test module
+```python
+{test_code.rstrip()}
+```
+
+## Missing Coverage
+The current tests DO NOT execute the following lines in the target module: {missing_lines}.
+
+## Instructions
+- Write ONLY the NEW test functions needed to hit those missing lines.
+- Do NOT rewrite the existing tests.
+- Output a single python block containing ONLY the new `def test_...():` functions (and any required imports for them). We will append this to the existing file.
+"""
