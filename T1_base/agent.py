@@ -18,7 +18,7 @@ from llm import LLMClient, LLMError, extract_code
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-BUDGET_SECONDS = 120.0
+BUDGET_SECONDS = 240.0
 FINALIZE_RESERVE = 8.0
 MIN_SECONDS_FOR_LLM_CYCLE = 20.0
 MAX_REPAIR_ROUNDS = 2
@@ -238,9 +238,20 @@ def main(ruta_archivo: str, output_folder: str) -> int:
     rounds_used = 0
     pruned_names: list[str] = []
 
-    # ---- GENERATE ----------------------------------------------------------
+# ---- GENERATE ----------------------------------------------------------
     code = call_llm(prompts.generation_prompt(target), "generate", temperature=0.3)
     if code is None:
+        # Extraer el detalle del error desde el último evento registrado en el log
+        last_err = log.events[-1].get("detail", "") if log.events else ""
+        
+        # Si el error contiene 503 o 504, imprimimos en consola, escribimos el JSON y abortamos
+        if "503" in last_err or "504" in last_err or "Timeout" in last_err:
+            print(f"\n[!] ERROR CRÍTICO DE API: {last_err}")
+            with open(os.path.join(output_folder, "metrics.json"), "w", encoding="utf-8") as fh:
+                json.dump({"error": "High demand"}, fh, indent=2)
+            return 2
+        
+        # Si falló por otro motivo ajeno a la API, recurre al test de emergencia
         code = emergency_test(target)
         pr = write_and_validate(code, "emergency")
     else:
