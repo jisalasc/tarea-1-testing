@@ -241,8 +241,12 @@ def run_mutation(test_file: str, cwd: str, target_file: str, work_dir: str,
     h0 = hashlib.md5(snapshot).hexdigest()
 
     with open(toml_path, "w", encoding="utf-8") as fh:
-        fh.write(MUTATION_TOML.format(target=target_file, per_test_timeout=per_test_timeout,
-                                      python=sys.executable, test_basename=os.path.basename(test_file)))
+        fh.write(MUTATION_TOML.format(
+            target=target_file.replace('\\', '/'), 
+            per_test_timeout=per_test_timeout,
+            python=sys.executable.replace('\\', '/'), 
+            test_basename=os.path.basename(test_file)
+        ))
     try:
         r = subprocess.run([sys.executable, "-m", "cosmic_ray.cli", "init", toml_path, db_path],
                            cwd=cwd, env=_ENV, capture_output=True, text=True,
@@ -267,7 +271,7 @@ def run_mutation(test_file: str, cwd: str, target_file: str, work_dir: str,
             proc.wait(timeout=remaining)
         except subprocess.TimeoutExpired:
             res.timed_out = True
-            proc.send_signal(signal.SIGINT)
+            proc.terminate()
             try:
                 proc.wait(timeout=5.0)
             except subprocess.TimeoutExpired:

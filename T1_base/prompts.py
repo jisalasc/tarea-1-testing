@@ -122,3 +122,15 @@ def repair_prompt(t: Target, test_code: str, pr) -> str:
 ## Output
 Return ONLY one ```python code block with the COMPLETE corrected test module (all tests, passing ones included). No explanations.
 """
+
+# ---------------------------------------------------------------------------
+# (pieza 3)
+# ---------------------------------------------------------------------------
+
+# def enhance_prompt(t: Target, test_code: str, missing_lines: list[int]) -> str:
+#     return f"""You are an expert Python test engineer. The following test suite works and passes, but it lacks coverage.
+# Your goal is to WRITE ADDITIONAL TESTS to cover the missing lines.
+
+# ## Target module: `{t.project_name}/{t.module_name}.py`
+# ```python
+# {t.source.rstrip()}
