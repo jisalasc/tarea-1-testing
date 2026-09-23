@@ -28,14 +28,101 @@ if _agent_project_dir:
             _sys.path.insert(0, _p)
 # --- fin cabecera --------------------------------------------------------------
 
-import blackjack.dealer as target_module
+import pytest
+import numpy as np
+from blackjack.dealer import init_standard_deck, BlackjackDealer
+from blackjack.base import Card
 
+class MockPlayer:
+    def __init__(self):
+        self.hand = []
 
-def test_module_imports():
-    assert target_module is not None
+def test_init_standard_deck():
+    deck = init_standard_deck()
+    assert len(deck) == 52
+    assert isinstance(deck[0], Card)
+    # Check for uniqueness
+    assert len(set(deck)) == 52
 
-def test_init_standard_deck_exists():
-    assert hasattr(target_module, 'init_standard_deck')
+def test_blackjack_dealer_initialization():
+    rng = np.random.RandomState(42)
+    # Test single deck
+    dealer = BlackjackDealer(rng, num_decks=1)
+    assert len(dealer.deck) == 52
+    assert dealer.status == 'alive'
+    assert dealer.score == 0
+    
+    # Test multi-deck
+    dealer_multi = BlackjackDealer(rng, num_decks=2)
+    assert len(dealer_multi.deck) == 104
 
-def test_BlackjackDealer_exists():
-    assert hasattr(target_module, 'BlackjackDealer')
+def test_blackjack_dealer_infinite_deck():
+    rng = np.random.RandomState(42)
+    # num_decks=0 triggers infinite deck logic
+    dealer = BlackjackDealer(rng, num_decks=0)
+    assert len(dealer.deck) == 52  # init_standard_deck is called once
+    
+    player = MockPlayer()
+    dealer.deal_card(player)
+    assert len(player.hand) == 1
+    # Check that card was NOT popped from deck
+    assert len(dealer.deck) == 52
+
+def test_shuffle():
+    rng = np.random.RandomState(42)
+    dealer = BlackjackDealer(rng, num_decks=1)
+    original_deck = list(dealer.deck)
+    dealer.shuffle()
+    assert len(dealer.deck) == 52
+    assert dealer.deck != original_deck
+
+def test_deal_card_removes_from_deck():
+    rng = np.random.RandomState(42)
+    dealer = BlackjackDealer(rng, num_decks=1)
+    player = MockPlayer()
+    
+    initial_len = len(dealer.deck)
+    dealer.deal_card(player)
+    
+    assert len(player.hand) == 1
+    assert len(dealer.deck) == initial_len - 1
+
+def test_deal_card_logic():
+    # Verify the card dealt is actually from the deck
+    rng = np.random.RandomState(42)
+    dealer = BlackjackDealer(rng, num_decks=1)
+    player = MockPlayer()
+    
+    # Capture the state before dealing
+    deck_snapshot = list(dealer.deck)
+    dealer.deal_card(player)
+    
+    assert player.hand[0] in deck_snapshot
+    assert player.hand[0] not in dealer.deck
+
+@pytest.mark.parametrize("num_decks", [1, 2])
+def test_dealer_state_consistency(num_decks):
+    rng = np.random.RandomState(42)
+    dealer = BlackjackDealer(rng, num_decks=num_decks)
+    assert dealer.num_decks == num_decks
+    assert dealer.status == 'alive'
+    assert dealer.score == 0
+
+def test_init_standard_deck_content():
+    deck = init_standard_deck()
+    # Verify specific cards exist
+    assert Card('S', 'A') in deck
+    assert Card('C', 'K') in deck
+    assert Card('H', '7') in deck
+
+def test_deal_card_multiple_times():
+    rng = np.random.RandomState(42)
+    dealer = BlackjackDealer(rng, num_decks=1)
+    player = MockPlayer()
+    
+    dealer.deal_card(player)
+    dealer.deal_card(player)
+    
+    assert len(player.hand) == 2
+    assert len(dealer.deck) == 50
+    assert player.hand[0] != player.hand[1]

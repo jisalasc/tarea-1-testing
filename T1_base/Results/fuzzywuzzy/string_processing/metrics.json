@@ -1,3 +1,5 @@
 {
-  "error": "High demand"
+  "line_coverage": 0.9333,
+  "branch_coverage": 0.5,
+  "mutation_score": 0.7273
 }
