@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 # --- cabecera generada por el agente: NO modificar ---------------------------
 # Los tests se ejecutan desde Results/<proyecto>/<archivo>/. Esta cabecera busca
 # hacia arriba la carpeta del proyecto y la agrega a sys.path junto con su raíz,
@@ -28,11 +30,62 @@ if _agent_project_dir:
             _sys.path.insert(0, _p)
 # --- fin cabecera --------------------------------------------------------------
 
-import fuzzywuzzy.string_processing as target_module
+import pytest
+from fuzzywuzzy.string_processing import StringProcessor
 
 
-def test_module_imports():
-    assert target_module is not None
+def test_replace_non_letters_non_numbers_with_whitespace():
+    input_str = "Hello, World! 123-456_789."
+    result = StringProcessor.replace_non_letters_non_numbers_with_whitespace(input_str)
+    # The regex r"(?ui)\W" matches any non-word character and replaces sequences with a single space.
+    assert result == "Hello  World  123 456_789 "
 
-def test_StringProcessor_exists():
-    assert hasattr(target_module, 'StringProcessor')
+
+def test_replace_non_letters_non_numbers_with_whitespace_empty():
+    assert StringProcessor.replace_non_letters_non_numbers_with_whitespace("") == ""
+
+
+@pytest.mark.parametrize(
+    "input_str,expected",
+    [
+        ("  hello  ", "hello"),
+        ("hello", "hello"),
+        ("\t\nhello\r ", "hello"),
+    ],
+)
+def test_strip(input_str, expected):
+    assert StringProcessor.strip(input_str) == expected
+
+
+@pytest.mark.parametrize(
+    "input_str,expected",
+    [
+        ("Hello World", "hello world"),
+        ("HELLO", "hello"),
+        ("hello", "hello"),
+        ("", ""),
+    ],
+)
+def test_to_lower_case(input_str, expected):
+    assert StringProcessor.to_lower_case(input_str) == expected
+
+
+@pytest.mark.parametrize(
+    "input_str,expected",
+    [
+        ("Hello World", "HELLO WORLD"),
+        ("hello", "HELLO"),
+        ("HELLO", "HELLO"),
+        ("", ""),
+    ],
+)
+def test_to_upper_case(input_str, expected):
+    assert StringProcessor.to_upper_case(input_str) == expected
+
+
+def test_string_processor_instance_methods():
+    processor = StringProcessor()
+    assert processor.to_lower_case("TEST") == "test"
+    assert processor.to_upper_case("test") == "TEST"
+    assert processor.strip("  test  ") == "test"
+    assert processor.replace_non_letters_non_numbers_with_whitespace("a#b") == "a b"

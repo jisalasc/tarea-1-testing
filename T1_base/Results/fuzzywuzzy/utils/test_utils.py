@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 # --- cabecera generada por el agente: NO modificar ---------------------------
 # Los tests se ejecutan desde Results/<proyecto>/<archivo>/. Esta cabecera busca
 # hacia arriba la carpeta del proyecto y la agrega a sys.path junto con su raíz,
@@ -30,111 +32,160 @@ if _agent_project_dir:
 
 import pytest
 from fuzzywuzzy.utils import (
-    validate_string, check_for_equivalence, check_for_none, 
-    check_empty_string, asciionly, asciidammit, 
-    make_type_consistent, full_process, intr
+    validate_string,
+    check_for_equivalence,
+    check_for_none,
+    check_empty_string,
+    asciionly,
+    asciidammit,
+    make_type_consistent,
+    full_process,
+    intr,
 )
 
-def test_validate_string():
-    assert validate_string("abc") is True
-    assert validate_string(" ") is True
-    assert validate_string("") is False
-    assert validate_string(None) is False
-    assert validate_string(123) is False
 
-def test_decorators():
-    # Mock function for decorators
-    def dummy(a, b): return 50
+@pytest.mark.parametrize(
+    "s,expected",
+    [
+        ("hello", True),
+        ("", False),
+        ("a", True),
+        ([1, 2], True),
+        ([], False),
+        (None, False),
+        (123, False),
+    ],
+)
+def test_validate_string(s, expected):
+    assert validate_string(s) == expected
 
-    # check_for_equivalence
-    decorated_eq = check_for_equivalence(dummy)
-    assert decorated_eq("a", "a") == 100
-    assert decorated_eq("a", "b") == 50
 
-    # check_for_none
-    decorated_none = check_for_none(dummy)
-    assert decorated_none(None, "b") == 0
-    assert decorated_none("a", None) == 0
-    assert decorated_none("a", "b") == 50
+def test_check_for_equivalence_equal():
+    @check_for_equivalence
+    def dummy(a, b):
+        return 42
 
-    # check_empty_string
-    decorated_empty = check_empty_string(dummy)
-    assert decorated_empty("", "b") == 0
-    assert decorated_empty("a", "") == 0
-    assert decorated_empty("a", "b") == 50
+    assert dummy("abc", "abc") == 100
+
+
+def test_check_for_equivalence_not_equal():
+    @check_for_equivalence
+    def dummy(a, b):
+        return 42
+
+    assert dummy("abc", "xyz") == 42
+
+
+def test_check_for_none_with_none():
+    @check_for_none
+    def dummy(a, b):
+        return 42
+
+    assert dummy(None, "abc") == 0
+    assert dummy("abc", None) == 0
+    assert dummy(None, None) == 0
+
+
+def test_check_for_none_without_none():
+    @check_for_none
+    def dummy(a, b):
+        return 42
+
+    assert dummy("abc", "xyz") == 42
+
+
+def test_check_empty_string_empty():
+    @check_empty_string
+    def dummy(a, b):
+        return 42
+
+    assert dummy("", "abc") == 0
+    assert dummy("abc", "") == 0
+    assert dummy("", "") == 0
+
+
+def test_check_empty_string_non_empty():
+    @check_empty_string
+    def dummy(a, b):
+        return 42
+
+    assert dummy("abc", "xyz") == 42
+
 
 def test_asciionly():
-    # bad_chars are 128-255
-    input_str = "abc" + chr(150)
-    assert asciionly(input_str) == "abc"
+    # ASCII chars remain, non-ASCII chars in range 128-255 are removed
+    text = "helloäöü"
+    res = asciionly(text)
+    assert res == "hello"
 
-def test_asciidammit():
-    assert asciidammit("abc") == "abc"
-    assert asciidammit("abc" + chr(150)) == "abc"
-    # Test non-string input (int)
-    assert asciidammit(123) == "123"
 
-def test_make_type_consistent():
-    # Both str
-    s1, s2 = make_type_consistent("a", "b")
-    assert isinstance(s1, str) and isinstance(s2, str)
-    
-    # Mixed types (int, str) -> forces to unicode (str in Py3)
-    s1, s2 = make_type_consistent(1, "b")
-    assert s1 == "1" and s2 == "b"
-    assert isinstance(s1, str) and isinstance(s2, str)
+def test_asciidammit_with_str():
+    text = "helloäöü"
+    res = asciidammit(text)
+    assert res == "hello"
 
-def test_full_process():
-    # Basic processing
-    assert full_process("  A!B 123  ") == "a b 123"
-    # Force ascii
-    assert full_process("A" + chr(150) + "B", force_ascii=True) == "ab"
 
-def test_intr():
-    assert intr(1.4) == 1
-    assert intr(1.6) == 2
-    assert intr(1.5) == 2  # Python 3 round rounds to nearest even, but 1.5 -> 2
-    assert intr(2.5) == 2  # 2.5 rounds to 2 (even)
+def test_asciidammit_with_unicode():
+    text = str("helloäöü")
+    res = asciidammit(text)
+    assert res == "hello"
 
-@pytest.mark.parametrize("input_val, expected", [
-    ("test", True),
-    ("", False),
-    ([], False),
-    (None, False)
-])
-def test_validate_string_parametrized(input_val, expected):
-    assert validate_string(input_val) == expected
 
-def test_asciidammit_unicode_path():
-    # Simulate unicode object in Py3 (which is str)
-    # The code checks `type(s) is unicode`. In Py3, unicode is str.
-    assert asciidammit("café") == "caf"
+def test_asciidammit_with_non_string():
+    # Pass an integer (or something not str/unicode) to trigger `else: return asciidammit(unicode(s))`
+    res = asciidammit(123)
+    assert res == "123"
 
-def test_full_process_edge_cases():
-    assert full_process("") == ""
-    assert full_process("!!!") == ""
-    assert full_process("123", force_ascii=True) == "123"
 
-def test_decorators_wraps():
-    def dummy(a, b): return 50
-    assert check_for_equivalence(dummy).__name__ == "dummy"
-    assert check_for_none(dummy).__name__ == "dummy"
-    assert check_empty_string(dummy).__name__ == "dummy"
+def test_make_type_consistent_both_str():
+    s1, s2 = "abc", "def"
+    r1, r2 = make_type_consistent(s1, s2)
+    assert r1 == "abc"
+    assert r2 == "def"
+    assert isinstance(r1, str)
+    assert isinstance(r2, str)
 
-def test_make_type_consistent_same_type():
-    # Ensure it returns original objects if types match
-    s1, s2 = "a", "b"
-    res1, res2 = make_type_consistent(s1, s2)
-    assert res1 is s1
-    assert res2 is s2
 
-def test_intr_types():
-    assert isinstance(intr(1.0), int)
-    assert isinstance(intr(1), int)
+def test_make_type_consistent_both_unicode():
+    s1, s2 = str("abc"), str("def")
+    r1, r2 = make_type_consistent(s1, s2)
+    assert r1 == "abc"
+    assert r2 == "def"
+    assert isinstance(r1, str)
+    assert isinstance(r2, str)
 
-def test_asciionly_empty():
-    assert asciionly("") == ""
 
-def test_full_process_whitespace_handling():
-    # Ensure internal whitespace is preserved but non-alphanumeric is removed
-    assert full_process("a!b  c") == "a b  c"
+def test_make_type_consistent_mixed():
+    s1, s2 = "abc", 123
+    r1, r2 = make_type_consistent(s1, s2)
+    assert r1 == "abc"
+    assert r2 == "123"
+    assert isinstance(r1, str)
+    assert isinstance(r2, str)
+
+
+@pytest.mark.parametrize(
+    "s,force_ascii,expected",
+    [
+        ("Hello, World! 123", False, "hello  world  123"),
+        ("Café 456", True, "caf 456"),
+        ("  Spaces  ", False, "spaces"),
+    ],
+)
+def test_full_process(s, force_ascii, expected):
+    assert full_process(s, force_ascii=force_ascii) == expected
+
+
+@pytest.mark.parametrize(
+    "n,expected",
+    [
+        (2.3, 2),
+        (2.7, 3),
+        (2.5, 2),
+        (3.5, 4),
+        (-2.5, -2),
+        (0.0, 0),
+    ],
+)
+def test_intr(n, expected):
+    assert intr(n) == expected

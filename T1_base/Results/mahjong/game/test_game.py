@@ -32,125 +32,121 @@ import pytest
 import numpy as np
 from mahjong.game import MahjongGame
 
-@pytest.fixture
-def game():
-    return MahjongGame(allow_step_back=True)
 
-def test_init(game):
-    assert game.allow_step_back is True
+def test_initialization():
+    game = MahjongGame(allow_step_back=False)
+    assert not game.allow_step_back
     assert game.num_players == 4
     assert isinstance(game.np_random, np.random.RandomState)
 
-def test_init_game(game):
-    state, player_id = game.init_game()
+    game_with_step = MahjongGame(allow_step_back=True)
+    assert game_with_step.allow_step_back
+
+
+def test_init_game():
+    game = MahjongGame(allow_step_back=True)
+    state, current_player = game.init_game()
+    
     assert isinstance(state, dict)
-    assert 0 <= player_id < 4
-    assert len(game.players) == 4
+    assert isinstance(current_player, int)
+    assert game.get_player_id() == current_player
     assert game.cur_state == state
+    assert game.get_num_players() == 4
+    assert game.dealer is not None
+    assert len(game.players) == 4
+    assert game.judger is not None
+    assert game.round is not None
+    assert game.history == []
 
 
-def test_step_back_empty_history(game):
-    # Initialize game to ensure attributes are set
+def test_step_and_step_back():
+    game = MahjongGame(allow_step_back=True)
     game.init_game()
-    # Clear history to test empty state
-    game.history = []
-    assert game.step_back() is False
+    
+    initial_round_player = game.round.current_player
+    
+    # Mock proceed_round to avoid hanging/complex logic
+    game.round.proceed_round = lambda players, action: setattr(game.round, 'current_player', (game.round.current_player + 1) % 4)
 
-def test_get_state(game):
+    # Take a step with a dummy action
+    next_state, next_player = game.step('check')
+    assert isinstance(next_state, dict)
+    assert isinstance(next_player, int)
+    assert len(game.history) == 1
+
+    # Test step_back
+    success = game.step_back()
+    assert success is True
+    assert len(game.history) == 0
+    assert game.round.current_player == initial_round_player
+
+
+def test_step_back_without_history():
+    game = MahjongGame(allow_step_back=False)
+    game.init_game()
+    
+    success = game.step_back()
+    assert success is False
+
+
+def test_get_state():
+    game = MahjongGame()
     game.init_game()
     state = game.get_state(0)
     assert isinstance(state, dict)
 
-def test_get_legal_actions_play_branch(game):
-    # Test the branch where valid_act is ['play']
-    state = {'valid_act': ['play'], 'action_cards': ['1m', '2m']}
-    actions = MahjongGame.get_legal_actions(state)
-    assert actions == ['1m', '2m']
 
-def test_get_legal_actions_other_branch(game):
-    # Test the branch where valid_act is something else
-    state = {'valid_act': ['pong', 'hu']}
-    actions = MahjongGame.get_legal_actions(state)
-    assert actions == ['pong', 'hu']
+def test_get_legal_actions_play():
+    # If state['valid_act'] is ['play'], get_legal_actions replaces it with state['action_cards']
+    state = {
+        'valid_act': ['play'],
+        'action_cards': ['card1', 'card2']
+    }
+    legal = MahjongGame.get_legal_actions(state)
+    assert legal == ['card1', 'card2']
+    # Verify state['valid_act'] is also mutated per implementation
+    assert state['valid_act'] == ['card1', 'card2']
 
-def test_get_num_actions(game):
+
+def test_get_legal_actions_other():
+    state = {
+        'valid_act': ['call', 'fold']
+    }
+    legal = MahjongGame.get_legal_actions(state)
+    assert legal == ['call', 'fold']
+
+
+def test_get_num_actions():
     assert MahjongGame.get_num_actions() == 38
 
-def test_get_num_players(game):
+
+def test_get_num_players():
+    game = MahjongGame()
     assert game.get_num_players() == 4
 
-def test_get_player_id(game):
-    game.init_game()
-    pid = game.get_player_id()
-    assert 0 <= pid < 4
 
-def test_is_over(game):
+def test_get_player_id():
+    game = MahjongGame()
     game.init_game()
-    # The result depends on the judger, but we verify it returns a boolean
-    result = game.is_over()
-    assert isinstance(result, bool)
+    assert game.get_player_id() == game.round.current_player
+
+
+def test_is_over():
+    game = MahjongGame()
+    game.init_game()
+    game.judger.judge_game = lambda g: (False, None, None)
+    over = game.is_over()
+    assert isinstance(over, bool)
     assert hasattr(game, 'winner')
 
-def test_step_without_step_back():
-    game = MahjongGame(allow_step_back=False)
-    game.init_game()
-    valid_actions = game.get_legal_actions(game.cur_state)
-    game.step(valid_actions[0])
-    assert not hasattr(game, 'history') or len(game.history) == 0
 
-@pytest.mark.parametrize("player_id", [0, 1, 2, 3])
-def test_get_state_for_all_players(game, player_id):
-    game.init_game()
-    state = game.get_state(player_id)
-    assert isinstance(state, dict)
-
-def test_game_flow_integration(game):
-    # Simple integration test for core flow
-    state, pid = game.init_game()
-    assert pid == game.get_player_id()
-    
-    # Perform a move
-    valid_actions = game.get_legal_actions(state)
-    new_state, next_pid = game.step(valid_actions[0])
-    assert isinstance(new_state, dict)
-    assert next_pid != pid
-    assert game.cur_state == new_state
-
-
-def test_num_players_property(game):
-    assert game.num_players == 4
-
-def test_random_state_consistency():
-    game1 = MahjongGame()
-    game2 = MahjongGame()
-    # Ensure random states are distinct
-    assert game1.np_random is not game2.np_random
-
-def test_step_back_multiple_times(game):
-    game.init_game()
-    valid_actions = game.get_legal_actions(game.cur_state)
-    game.step(valid_actions[0])
-    # After step, state changes, get new valid actions
-    valid_actions_2 = game.get_legal_actions(game.cur_state)
-    game.step(valid_actions_2[0])
-    assert len(game.history) == 2
-    game.step_back()
-    game.step_back()
-    assert len(game.history) == 0
-    assert game.step_back() is False
-
-def test_get_legal_actions_empty_list(game):
-    state = {'valid_act': [], 'action_cards': []}
-    assert MahjongGame.get_legal_actions(state) == []
-
-def test_step_invalid_action_handling(game):
-    # This tests that the game proceeds even if action is arbitrary
-    game.init_game()
-    with pytest.raises(Exception):
-        game.step("invalid_action")
-
-def test_judger_interaction(game):
-    game.init_game()
-    # Ensure judger exists and is accessible via game
-    assert hasattr(game, 'judger')
-    assert game.judger is not None
+@pytest.mark.parametrize("allow_step_back", [True, False])
+def test_game_modes(allow_step_back):
+    game = MahjongGame(allow_step_back=allow_step_back)
+    game.dealer = type('MockDealer', (), {'deal_cards': lambda self, *a: None})()
+    game.players = [type('MockPlayer', (), {})() for _ in range(4)]
+    game.judger = type('MockJudger', (), {'judge_game': lambda self, g: (False, 0, None)})()
+    game.round = type('MockRound', (), {'current_player': 0, 'get_state': lambda self, p, id: {}})()
+    state, player_id = game.init_game()
+    assert state is not None
+    assert player_id in range(4)

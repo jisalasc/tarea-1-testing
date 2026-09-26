@@ -28,94 +28,93 @@ if _agent_project_dir:
             _sys.path.insert(0, _p)
 # --- fin cabecera --------------------------------------------------------------
 
-import pytest
+from unittest.mock import MagicMock
 import numpy as np
+import pytest
+
 from blackjack.judger import BlackjackJudger
 
-class MockCard:
-    def __init__(self, rank):
-        self.rank = rank
-
-class MockPlayer:
-    def __init__(self, hand, status=None, score=0):
-        self.hand = hand
-        self.status = status
-        self.score = score
-
-class MockGame:
-    def __init__(self, players, dealer):
-        self.players = players
-        self.dealer = dealer
-        self.winner = {}
 
 @pytest.fixture
 def judger():
-    return BlackjackJudger(np.random.RandomState(42))
+    np_random = np.random.RandomState(42)
+    return BlackjackJudger(np_random)
 
-def test_judge_score(judger):
-    # Basic scores
-    assert judger.judge_score([MockCard("2"), MockCard("3")]) == 5
-    assert judger.judge_score([MockCard("T"), MockCard("K")]) == 20
-    # Ace logic: 11 + 11 = 22 -> 12
-    assert judger.judge_score([MockCard("A"), MockCard("A")]) == 12
-    # Ace logic: 11 + 5 + 6 = 22 -> 12
-    assert judger.judge_score([MockCard("A"), MockCard("5"), MockCard("6")]) == 12
-    # No Ace
-    assert judger.judge_score([MockCard("9"), MockCard("8")]) == 17
 
-def test_judge_round(judger):
-    player_alive = MockPlayer([MockCard("2"), MockCard("3")])
-    status, score = judger.judge_round(player_alive)
+@pytest.mark.parametrize(
+    "ranks,expected_score",
+    [
+        (["2", "3"], 5),
+        (["T", "J", "Q", "K"], 40),
+        (["A", "A"], 12),
+        (["A", "9", "A"], 21),
+        (["A", "A", "A"], 13),
+        (["K", "5", "A"], 16),
+        (["A", "K", "5"], 16),
+        (["A", "K", "A"], 12),
+    ],
+)
+def test_judge_score(judger, ranks, expected_score):
+    cards = [MagicMock(rank=r) for r in ranks]
+    assert judger.judge_score(cards) == expected_score
+
+
+def test_judge_round_alive(judger):
+    player = MagicMock()
+    player.hand = [MagicMock(rank="T"), MagicMock(rank="5")]
+    status, score = judger.judge_round(player)
     assert status == "alive"
-    assert score == 5
+    assert score == 15
 
-    player_bust = MockPlayer([MockCard("K"), MockCard("Q"), MockCard("5")])
-    status, score = judger.judge_round(player_bust)
+
+def test_judge_round_bust(judger):
+    player = MagicMock()
+    player.hand = [MagicMock(rank="K"), MagicMock(rank="Q"), MagicMock(rank="5")]
+    status, score = judger.judge_round(player)
     assert status == "bust"
     assert score == 25
 
-def test_judge_game_logic(judger):
-    # Setup scenarios
-    p1 = MockPlayer([], status='alive', score=18)
-    dealer_bust = MockPlayer([], status='bust', score=22)
-    game = MockGame([p1], dealer_bust)
-    
-    # 1. Player alive, Dealer bust
-    judger.judge_game(game, 0)
-    assert game.winner['player0'] == 2
 
-    # 2. Player bust
-    p_bust = MockPlayer([], status='bust', score=22)
-    game2 = MockGame([p_bust], MockPlayer([], status='alive', score=18))
-    judger.judge_game(game2, 0)
-    assert game2.winner['player0'] == -1
+@pytest.mark.parametrize(
+    "player_status,dealer_status,player_score,dealer_score,expected_winner_val",
+    [
+        ("bust", "alive", 22, 18, -1),
+        ("alive", "bust", 15, 22, 2),
+        ("alive", "alive", 20, 18, 2),
+        ("alive", "alive", 17, 19, -1),
+        ("alive", "alive", 18, 18, 1),
+    ],
+)
+def test_judge_game(
+    judger,
+    player_status,
+    dealer_status,
+    player_score,
+    dealer_score,
+    expected_winner_val,
+):
+    game = MagicMock()
+    player = MagicMock()
+    player.status = player_status
+    player.score = player_score
+    dealer = MagicMock()
+    dealer.status = dealer_status
+    dealer.score = dealer_score
 
-    # 3. Player higher score
-    p_win = MockPlayer([], status='alive', score=20)
-    d_lose = MockPlayer([], status='alive', score=19)
-    game3 = MockGame([p_win], d_lose)
-    judger.judge_game(game3, 0)
-    assert game3.winner['player0'] == 2
+    game.players = [player]
+    game.dealer = dealer
+    game.winner = {}
+    game_pointer = 0
 
-    # 4. Dealer higher score
-    p_lose = MockPlayer([], status='alive', score=15)
-    d_win = MockPlayer([], status='alive', score=19)
-    game4 = MockGame([p_lose], d_win)
-    judger.judge_game(game4, 0)
-    assert game4.winner['player0'] == -1
+    judger.judge_game(game, game_pointer)
 
-    # 5. Tie
-    p_tie = MockPlayer([], status='alive', score=18)
-    d_tie = MockPlayer([], status='alive', score=18)
-    game5 = MockGame([p_tie], d_tie)
-    judger.judge_game(game5, 0)
-    assert game5.winner['player0'] == 1
+    assert game.winner["player0"] == expected_winner_val
 
-def test_judge_score_complex_ace(judger):
-    # Multiple aces handling
-    # A, A, A, A = 11+1+1+1 = 14
-    assert judger.judge_score([MockCard("A")] * 4) == 14
-    # A, A, 9 = 11+1+9 = 21
-    assert judger.judge_score([MockCard("A"), MockCard("A"), MockCard("9")]) == 21
-    # A, A, T = 11+1+10 = 22 -> 12
-    assert judger.judge_score([MockCard("A"), MockCard("A"), MockCard("T")]) == 12
+
+def test_init_sets_attributes(judger):
+    np_random = np.random.RandomState(123)
+    j = BlackjackJudger(np_random)
+    assert j.np_random is np_random
+    assert j.rank2score["A"] == 11
+    assert j.rank2score["K"] == 10
+    assert j.rank2score["2"] == 2

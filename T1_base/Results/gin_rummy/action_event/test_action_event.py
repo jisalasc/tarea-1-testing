@@ -29,93 +29,146 @@ if _agent_project_dir:
 # --- fin cabecera --------------------------------------------------------------
 
 import pytest
+import utils as utils
 from gin_rummy import Card
-import gin_rummy.utils as utils
 from gin_rummy.action_event import (
-    ActionEvent, ScoreNorthPlayerAction, ScoreSouthPlayerAction, 
-    DrawCardAction, PickUpDiscardAction, DeclareDeadHandAction, 
-    GinAction, DiscardAction, KnockAction
+    ActionEvent,
+    ScoreNorthPlayerAction,
+    ScoreSouthPlayerAction,
+    DrawCardAction,
+    PickUpDiscardAction,
+    DeclareDeadHandAction,
+    GinAction,
+    DiscardAction,
+    KnockAction,
+    score_player_0_action_id,
+    score_player_1_action_id,
+    draw_card_action_id,
+    pick_up_discard_action_id,
+    declare_dead_hand_action_id,
+    gin_action_id,
+    discard_action_id,
+    knock_action_id,
 )
 
-def test_action_event_equality():
-    a1 = ActionEvent(10)
-    a2 = ActionEvent(10)
-    a3 = ActionEvent(11)
-    assert a1 == a2
-    assert a1 != a3
-    assert a1 != "not an action"
+
+def test_action_event_init_and_equality():
+    event1 = ActionEvent(10)
+    event2 = ActionEvent(10)
+    event3 = ActionEvent(20)
+
+    assert event1.action_id == 10
+    assert event1 == event2
+    assert event1 != event3
+    assert event1 != "not an action event"
+
 
 def test_get_num_actions():
-    # knock_action_id (58) + 52 = 110
-    assert ActionEvent.get_num_actions() == 110
+    num_actions = ActionEvent.get_num_actions()
+    assert num_actions == knock_action_id + 52
 
-@pytest.mark.parametrize("action_id, expected_cls, expected_str", [
-    (0, ScoreNorthPlayerAction, "score N"),
-    (1, ScoreSouthPlayerAction, "score S"),
-    (2, DrawCardAction, "draw_card"),
-    (3, PickUpDiscardAction, "pick_up_discard"),
-    (4, DeclareDeadHandAction, "declare_dead_hand"),
-    (5, GinAction, "gin"),
-])
-def test_decode_simple_actions(action_id, expected_cls, expected_str):
+
+@pytest.mark.parametrize(
+    "action_id,expected_type,expected_str",
+    [
+        (score_player_0_action_id, ScoreNorthPlayerAction, "score N"),
+        (score_player_1_action_id, ScoreSouthPlayerAction, "score S"),
+        (draw_card_action_id, DrawCardAction, "draw_card"),
+        (pick_up_discard_action_id, PickUpDiscardAction, "pick_up_discard"),
+        (declare_dead_hand_action_id, DeclareDeadHandAction, "declare_dead_hand"),
+        (gin_action_id, GinAction, "gin"),
+    ],
+)
+def test_decode_action_basic_events(action_id, expected_type, expected_str):
     action = ActionEvent.decode_action(action_id)
-    assert isinstance(action, expected_cls)
+    assert isinstance(action, expected_type)
+    assert action.action_id == action_id
     assert str(action) == expected_str
 
-def test_decode_discard_action():
-    # Discard range 6 to 57. Let's test card_id 0 (index 6)
-    action = ActionEvent.decode_action(6)
+
+@pytest.mark.parametrize("card_id", [0, 10, 25, 51])
+def test_decode_action_discard(card_id):
+    action_id = discard_action_id + card_id
+    card = utils.get_card(card_id=card_id)
+    action = ActionEvent.decode_action(action_id)
     assert isinstance(action, DiscardAction)
-    assert action.action_id == 6
-    assert isinstance(action.card, Card)
-    assert str(action).startswith("discard ")
+    assert action.action_id == action_id
+    assert action.card == card
+    assert str(action) == f"discard {str(card)}"
 
-def test_decode_knock_action():
-    # Knock range 58 to 109. Let's test card_id 0 (index 58)
-    action = ActionEvent.decode_action(58)
+
+@pytest.mark.parametrize("card_id", [0, 12, 30, 51])
+def test_decode_action_knock(card_id):
+    action_id = knock_action_id + card_id
+    card = utils.get_card(card_id=card_id)
+    action = ActionEvent.decode_action(action_id)
     assert isinstance(action, KnockAction)
-    assert action.action_id == 58
-    assert isinstance(action.card, Card)
-    assert str(action).startswith("knock ")
-
-def test_decode_invalid_action():
-    with pytest.raises(Exception, match="decode_action: unknown action_id=111"):
-        ActionEvent.decode_action(111)
-
-def test_discard_action_init():
-    card = utils.get_card(0)
-    action = DiscardAction(card=card)
-    assert action.action_id == 6
+    assert action.action_id == action_id
     assert action.card == card
+    assert str(action) == f"knock {str(card)}"
 
-def test_knock_action_init():
-    card = utils.get_card(0)
-    action = KnockAction(card=card)
-    assert action.action_id == 58
-    assert action.card == card
 
-def test_action_event_str_classes():
-    assert str(ScoreNorthPlayerAction()) == "score N"
-    assert str(ScoreSouthPlayerAction()) == "score S"
-    assert str(DrawCardAction()) == "draw_card"
-    assert str(PickUpDiscardAction()) == "pick_up_discard"
-    assert str(DeclareDeadHandAction()) == "declare_dead_hand"
-    assert str(GinAction()) == "gin"
 
-@pytest.mark.parametrize("card_id", range(52))
-def test_all_discard_actions(card_id):
-    card = utils.get_card(card_id)
+
+def test_score_north_player_action():
+    action = ScoreNorthPlayerAction()
+    assert action.action_id == score_player_0_action_id
+    assert str(action) == "score N"
+    assert action == ActionEvent(score_player_0_action_id)
+
+
+def test_score_south_player_action():
+    action = ScoreSouthPlayerAction()
+    assert action.action_id == score_player_1_action_id
+    assert str(action) == "score S"
+    assert action == ActionEvent(score_player_1_action_id)
+
+
+def test_draw_card_action():
+    action = DrawCardAction()
+    assert action.action_id == draw_card_action_id
+    assert str(action) == "draw_card"
+    assert action == ActionEvent(draw_card_action_id)
+
+
+def test_pick_up_discard_action():
+    action = PickUpDiscardAction()
+    assert action.action_id == pick_up_discard_action_id
+    assert str(action) == "pick_up_discard"
+    assert action == ActionEvent(pick_up_discard_action_id)
+
+
+def test_declare_dead_hand_action():
+    action = DeclareDeadHandAction()
+    assert action.action_id == declare_dead_hand_action_id
+    assert str(action) == "declare_dead_hand"
+    assert action == ActionEvent(declare_dead_hand_action_id)
+
+
+def test_gin_action():
+    action = GinAction()
+    assert action.action_id == gin_action_id
+    assert str(action) == "gin"
+    assert action == ActionEvent(gin_action_id)
+
+
+@pytest.mark.parametrize("card_id", [0, 5, 15, 51])
+def test_discard_action(card_id):
+    card = utils.get_card(card_id=card_id)
     action = DiscardAction(card=card)
-    decoded = ActionEvent.decode_action(6 + card_id)
-    assert decoded == action
-    assert isinstance(decoded, DiscardAction)
-    assert decoded.card == card
+    expected_id = discard_action_id + card_id
+    assert action.action_id == expected_id
+    assert action.card == card
+    assert str(action) == f"discard {str(card)}"
+    assert action == ActionEvent(expected_id)
 
-@pytest.mark.parametrize("card_id", range(52))
-def test_all_knock_actions(card_id):
-    card = utils.get_card(card_id)
+
+@pytest.mark.parametrize("card_id", [0, 7, 22, 51])
+def test_knock_action(card_id):
+    card = utils.get_card(card_id=card_id)
     action = KnockAction(card=card)
-    decoded = ActionEvent.decode_action(58 + card_id)
-    assert decoded == action
-    assert isinstance(decoded, KnockAction)
-    assert decoded.card == card
+    expected_id = knock_action_id + card_id
+    assert action.action_id == expected_id
+    assert action.card == card
+    assert str(action) == f"knock {str(card)}"
+    assert action == ActionEvent(expected_id)

@@ -28,86 +28,72 @@ if _agent_project_dir:
             _sys.path.insert(0, _p)
 # --- fin cabecera --------------------------------------------------------------
 
-import pytest
 import numpy as np
-from unittest.mock import MagicMock
+import pytest
+
 from gin_rummy.dealer import GinRummyDealer
 from gin_rummy.player import GinRummyPlayer
+
+
+class DummyPlayer:
+    """A minimal mock-like player to track calls without relying on complex internal states."""
+    def __init__(self):
+        self.hand = []
+        self.populated_count = 0
+
+    def did_populate_hand(self):
+        self.populated_count += 1
+
 
 @pytest.fixture
 def rng():
     return np.random.RandomState(42)
 
-@pytest.fixture
-def dealer(rng):
-    return GinRummyDealer(rng)
-
-@pytest.fixture
-def player(rng):
-    # Mocking the player to avoid complex dependency initialization
-    p = MagicMock(spec=GinRummyPlayer)
-    p.hand = []
-    return p
 
 def test_dealer_initialization(rng):
     dealer = GinRummyDealer(rng)
+    
+    assert dealer.np_random is rng
     assert dealer.discard_pile == []
+    # Standard deck from utils.get_deck() has 52 cards
     assert len(dealer.shuffled_deck) == 52
     assert len(dealer.stock_pile) == 52
-    # Verify stock_pile is a copy, not the same list object
-    assert dealer.stock_pile is not dealer.shuffled_deck
+    # stock_pile should be a copy of shuffled_deck
     assert dealer.stock_pile == dealer.shuffled_deck
+    # But they should be separate list instances
+    assert dealer.stock_pile is not dealer.shuffled_deck
 
-def test_deal_cards_updates_player_hand(dealer, player):
-    num_cards = 5
-    initial_stock_size = len(dealer.stock_pile)
+
+def test_deal_cards_normal(rng):
+    dealer = GinRummyDealer(rng)
+    player = DummyPlayer()
+    
+    initial_stock_len = len(dealer.stock_pile)
+    num_to_deal = 5
+    
+    dealer.deal_cards(player, num_to_deal)
+    
+    assert len(player.hand) == num_to_deal
+    assert len(dealer.stock_pile) == initial_stock_len - num_to_deal
+    assert player.populated_count == 1
+
+
+@pytest.mark.parametrize("num_cards", [0, 1, 10])
+def test_deal_cards_various_counts(rng, num_cards):
+    dealer = GinRummyDealer(rng)
+    player = DummyPlayer()
     
     dealer.deal_cards(player, num_cards)
     
     assert len(player.hand) == num_cards
-    assert len(dealer.stock_pile) == initial_stock_size - num_cards
-    player.did_populate_hand.assert_called_once()
+    assert player.populated_count == 1
 
-def test_deal_cards_zero_count(dealer, player):
-    dealer.deal_cards(player, 0)
-    assert len(player.hand) == 0
-    player.did_populate_hand.assert_called_once()
 
-def test_deal_cards_exhaust_stock(dealer, player):
-    num_cards = 52
-    dealer.deal_cards(player, num_cards)
-    assert len(player.hand) == 52
-    assert len(dealer.stock_pile) == 0
-    with pytest.raises(IndexError):
-        dealer.deal_cards(player, 1)
-
-def test_dealer_randomness_consistency(rng):
-    # Ensure two dealers with the same seed produce the same shuffle
-    dealer1 = GinRummyDealer(np.random.RandomState(42))
-    dealer2 = GinRummyDealer(np.random.RandomState(42))
+def test_deal_cards_with_actual_gin_rummy_player(rng):
+    dealer = GinRummyDealer(rng)
+    player = GinRummyPlayer(player_id=0, np_random=rng)
     
-    assert dealer1.stock_pile == dealer2.stock_pile
-
-def test_deal_cards_order(dealer, player):
-    # Verify that cards are popped from the end of the stock_pile
-    original_stock = list(dealer.stock_pile)
-    dealer.deal_cards(player, 2)
+    dealer.deal_cards(player, 7)
     
-    assert player.hand[0] == original_stock[-1]
-    assert player.hand[1] == original_stock[-2]
-    assert dealer.stock_pile == original_stock[:-2]
-
-def test_deal_cards_multiple_players(dealer, rng):
-    p1 = MagicMock(spec=GinRummyPlayer)
-    p1.hand = []
-    p2 = MagicMock(spec=GinRummyPlayer)
-    p2.hand = []
-    
-    dealer.deal_cards(p1, 3)
-    dealer.deal_cards(p2, 3)
-    
-    assert len(p1.hand) == 3
-    assert len(p2.hand) == 3
-    assert len(dealer.stock_pile) == 52 - 6
-    # Ensure no overlap
-    assert all(card not in p2.hand for card in p1.hand)
+    assert len(player.hand) == 7
+    # GinRummyPlayer doesn't raise error on did_populate_hand

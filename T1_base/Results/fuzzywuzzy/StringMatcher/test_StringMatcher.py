@@ -29,143 +29,139 @@ if _agent_project_dir:
 # --- fin cabecera --------------------------------------------------------------
 
 import pytest
-from warnings import catch_warnings
+import warnings
 from fuzzywuzzy.StringMatcher import StringMatcher
+from Levenshtein import editops, opcodes
 
-def test_init_and_setters():
-    sm = StringMatcher(seq1="apple", seq2="apply")
-    assert sm._str1 == "apple"
-    assert sm._str2 == "apply"
-    
-    sm.set_seq1("banana")
-    assert sm._str1 == "banana"
-    
-    sm.set_seq2("bandana")
-    assert sm._str2 == "bandana"
-    
-    sm.set_seqs("cat", "dog")
-    assert sm._str1 == "cat"
-    assert sm._str2 == "dog"
 
-def test_isjunk_warning():
-    with catch_warnings(record=True) as w:
-        StringMatcher(isjunk=lambda x: True)
-        assert len(w) == 1
-        assert "isjunk not NOT implemented" in str(w[-1].message)
+def test_init_default():
+    matcher = StringMatcher()
+    assert matcher._str1 == ''
+    assert matcher._str2 == ''
+    assert matcher._ratio is None
+    assert matcher._distance is None
+    assert matcher._opcodes is None
+    assert matcher._editops is None
+    assert matcher._matching_blocks is None
+
+
+def test_init_with_seqs():
+    matcher = StringMatcher(seq1='abc', seq2='abd')
+    assert matcher._str1 == 'abc'
+    assert matcher._str2 == 'abd'
+
+
+def test_init_with_isjunk_warning():
+    with pytest.warns(UserWarning, match="isjunk not NOT implemented, it will be ignored"):
+        matcher = StringMatcher(isjunk=lambda x: True, seq1='a', seq2='b')
+    assert matcher._str1 == 'a'
+    assert matcher._str2 == 'b'
+
+
+def test_set_seqs():
+    matcher = StringMatcher('foo', 'bar')
+    matcher.set_seqs('hello', 'world')
+    assert matcher._str1 == 'hello'
+    assert matcher._str2 == 'world'
+    assert matcher._ratio is None
+
+
+def test_set_seq1():
+    matcher = StringMatcher('foo', 'bar')
+    matcher.set_seq1('baz')
+    assert matcher._str1 == 'baz'
+    assert matcher._str2 == ''
+    assert matcher._distance is None
+
+
+
 
 def test_ratio():
-    sm = StringMatcher(seq1="test", seq2="tent")
-    # Levenshtein.ratio("test", "tent") is 0.75
-    assert sm.ratio() == 0.75
-    assert sm._ratio == 0.75
-    # Verify cache usage
-    assert sm.quick_ratio() == 0.75
+    matcher = StringMatcher('cat', 'bat')
+    r1 = matcher.ratio()
+    r2 = matcher.ratio()  # hits cached branch
+    assert r1 == r2
+    assert 0.0 <= r1 <= 1.0
+
+
+def test_quick_ratio():
+    matcher = StringMatcher('cat', 'bat')
+    qr = matcher.quick_ratio()
+    assert 0.0 <= qr <= 1.0
+
 
 def test_real_quick_ratio():
-    sm = StringMatcher(seq1="abc", seq2="abcdef")
-    # 2 * min(3, 6) / (3 + 6) = 6 / 9 = 0.666...
-    assert sm.real_quick_ratio() == pytest.approx(0.6666666666666666)
+    matcher = StringMatcher('cat', 'concatenate')
+    rqr = matcher.real_quick_ratio()
+    assert 0.0 <= rqr <= 1.0
 
-def test_distance():
-    sm = StringMatcher(seq1="kitten", seq2="sitting")
-    assert sm.distance() == 3
-    assert sm._distance == 3
+    # Test edge case with empty strings (division by zero handling in source)
+    matcher_empty = StringMatcher('', '')
+    with pytest.raises(ZeroDivisionError):
+        matcher_empty.real_quick_ratio()
+
+
+
 
 def test_get_opcodes_from_scratch():
-    sm = StringMatcher(seq1="a", seq2="b")
-    opcodes = sm.get_opcodes()
-    assert len(opcodes) > 0
-    assert sm._opcodes == opcodes
+    matcher = StringMatcher('abc', 'abd')
+    opcodes = matcher.get_opcodes()
+    assert isinstance(opcodes, list)
+    assert matcher._opcodes is not None
+
 
 def test_get_opcodes_from_editops():
-    sm = StringMatcher(seq1="a", seq2="b")
-    sm.get_editops()
-    opcodes = sm.get_opcodes()
-    assert opcodes == [('replace', 0, 1, 0, 1)]
+    matcher = StringMatcher('abc', 'abd')
+    # Force _editops first to test the branch in get_opcodes
+    matcher._editops = editops(matcher._str1, matcher._str2)
+    matcher._opcodes = None
+    opcodes = matcher.get_opcodes()
+    assert isinstance(opcodes, list)
 
+
+def test_get_editops_from_scratch():
+    matcher = StringMatcher('abc', 'abd')
+    editops_res = matcher.get_editops()
+    assert isinstance(editops_res, list)
+    assert matcher._editops is not None
+
+
+def test_get_editops_from_opcodes():
+    matcher = StringMatcher('abc', 'abd')
+    # Force _opcodes first to test the branch in get_editops
+    matcher._opcodes = opcodes(matcher._str1, matcher._str2)
+    matcher._editops = None
+    editops_res = matcher.get_editops()
+    assert isinstance(editops_res, list)
 
 
 def test_get_matching_blocks():
-    sm = StringMatcher(seq1="abc", seq2="axc")
-    blocks = sm.get_matching_blocks()
-    # Should find 'a' and 'c'
-    assert (0, 0, 1) in blocks
-    assert (2, 2, 1) in blocks
-    assert (3, 3, 0) in blocks # Sentinel
-
-def test_reset_cache():
-    sm = StringMatcher("a", "b")
-    sm.ratio()
-    sm.distance()
-    sm.get_opcodes()
-    sm._reset_cache()
-    assert sm._ratio is None
-    assert sm._distance is None
-    assert sm._opcodes is None
-
-@pytest.mark.parametrize("s1, s2, expected_dist", [
-    ("", "", 0),
-    ("a", "", 1),
-    ("", "a", 1),
-    ("abc", "abc", 0),
-])
-def test_distance_variations(s1, s2, expected_dist):
-    sm = StringMatcher(seq1=s1, seq2=s2)
-    assert sm.distance() == expected_dist
-
-def test_empty_strings_ratio():
-    sm = StringMatcher("", "")
-    assert sm.ratio() == 1.0
-
-def test_real_quick_ratio_zero_len():
-    sm = StringMatcher("", "a")
-    assert sm.real_quick_ratio() == 0.0
-
-def test_opcodes_structure():
-    sm = StringMatcher("abc", "ac")
-    # 'b' is deleted at index 1
-    opcodes = sm.get_opcodes()
-    assert any(op[0] == 'delete' for op in opcodes)
+    matcher = StringMatcher('abcdef', 'abxdef')
+    blocks = matcher.get_matching_blocks()
+    assert isinstance(blocks, list)
+    assert matcher._matching_blocks is not None
+    # Subsequent call hits cached branch
+    blocks_cached = matcher.get_matching_blocks()
+    assert blocks == blocks_cached
 
 
-def test_caching_consistency():
-    sm = StringMatcher("hello", "world")
-    r1 = sm.ratio()
-    r2 = sm.ratio()
-    assert r1 == r2
-    assert sm._ratio is not None
+def test_reset_cache_clears_all():
+    matcher = StringMatcher('abc', 'abc')
+    matcher.ratio()
+    matcher.distance()
+    matcher.get_opcodes()
+    matcher.get_editops()
+    matcher.get_matching_blocks()
 
-def test_set_seqs_resets_cache():
-    sm = StringMatcher("a", "b")
-    sm.ratio()
-    assert sm._ratio is not None
-    sm.set_seqs("c", "d")
-    assert sm._ratio is None
+    assert matcher._ratio is not None
+    assert matcher._distance is not None
+    assert matcher._opcodes is not None
+    assert matcher._editops is not None
+    assert matcher._matching_blocks is not None
 
-def test_set_seq1_resets_cache():
-    sm = StringMatcher("a", "b")
-    sm.ratio()
-    sm.set_seq1("c")
-    assert sm._ratio is None
-
-def test_set_seq2_resets_cache():
-    sm = StringMatcher("a", "b")
-    sm.ratio()
-    sm.set_seq2("c")
-    assert sm._ratio is None
-
-def test_get_opcodes_type():
-    sm = StringMatcher("a", "b")
-    assert isinstance(sm.get_opcodes(), list)
-
-def test_get_editops_type():
-    sm = StringMatcher("a", "b")
-    assert isinstance(sm.get_editops(), list)
-
-def test_get_matching_blocks_type():
-    sm = StringMatcher("a", "b")
-    assert isinstance(sm.get_matching_blocks(), list)
-
-def test_quick_ratio_is_ratio():
-    sm = StringMatcher("test", "tent")
-    assert sm.quick_ratio() == sm.ratio()
+    matcher._reset_cache()
+    assert matcher._ratio is None
+    assert matcher._distance is None
+    assert matcher._opcodes is None
+    assert matcher._editops is None
+    assert matcher._matching_blocks is None

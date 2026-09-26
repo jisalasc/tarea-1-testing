@@ -12,7 +12,8 @@ import httpx
 from google import genai
 from google.genai import errors, types
 
-MODEL = "gemini-3.1-flash-lite"
+MODEL = "gemini-3.5-flash-lite"
+# MODEL = "gemini-3.1-flash-lite"
 RETRYABLE_CODES = {408, 429, 500, 502, 503, 504}
 MIN_USEFUL_SECONDS = 10.0
 

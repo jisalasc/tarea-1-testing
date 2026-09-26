@@ -30,134 +30,176 @@ if _agent_project_dir:
 
 import pytest
 from stock4.validate import (
-    Validator, Typed, Positive, NonEmpty, PositiveInteger, PositiveFloat, 
-    NonEmptyString, isvalidator, validated, enforce, Integer, Float, String
+    Validator,
+    Typed,
+    Positive,
+    NonEmpty,
+    PositiveInteger,
+    PositiveFloat,
+    NonEmptyString,
+    Integer,
+    Float,
+    String,
+    isvalidator,
+    validated,
+    enforce,
 )
 
-def test_validator_basic():
-    v = Validator("test")
-    assert v.check(10) == 10
-    
-    class Dummy:
-        val = Validator()
-    
-    d = Dummy()
-    d.val = 5
-    assert d.__dict__['val'] == 5
 
-def test_typed_classes():
-    assert Integer.check(1) == 1
+def test_validator_basic():
+    v = Validator("foo")
+    assert v.name == "foo"
+    assert v.check(10) == 10
+
+    # Test __set_name__ and descriptor protocol __set__
+    class Holder:
+        val = Validator()
+
+    h = Holder()
+    h.val = 42
+    assert h.__dict__["val"] == 42
+
+
+def test_validator_subclass_registry():
+    assert "Validator" not in Validator.validators
+    assert "Typed" in Validator.validators
+    assert "Positive" in Validator.validators
+    assert "NonEmpty" in Validator.validators
+    assert "PositiveInteger" in Validator.validators
+    assert Validator.validators["PositiveInteger"] is PositiveInteger
+
+
+def test_typed_validation():
+    assert Integer.check(5) == 5
     with pytest.raises(TypeError, match="expected <class 'int'>"):
-        Integer.check("a")
-    
-    assert Float.check(1.5) == 1.5
+        Integer.check(5.5)
+
+    assert Float.check(3.14) == 3.14
     with pytest.raises(TypeError, match="expected <class 'float'>"):
-        Float.check(1)
-        
-    assert String.check("abc") == "abc"
+        Float.check(10)
+
+    assert String.check("hello") == "hello"
     with pytest.raises(TypeError, match="expected <class 'str'>"):
         String.check(123)
 
-def test_positive_and_nonempty():
+
+def test_positive_validation():
     assert Positive.check(0) == 0
-    assert Positive.check(1) == 1
+    assert Positive.check(100) == 100
     with pytest.raises(ValueError, match="must be >= 0"):
         Positive.check(-1)
-        
-    assert NonEmpty.check("a") == "a"
+
+
+def test_non_empty_validation():
+    assert NonEmpty.check([1, 2]) == [1, 2]
+    assert NonEmpty.check("abc") == "abc"
     with pytest.raises(ValueError, match="must be non-empty"):
         NonEmpty.check("")
+    with pytest.raises(ValueError, match="must be non-empty"):
+        NonEmpty.check([])
+
 
 def test_composite_validators():
-    assert PositiveInteger.check(5) == 5
-    with pytest.raises(ValueError, match="must be >= 0"):
-        PositiveInteger.check(-1)
-    with pytest.raises(TypeError, match="expected <class 'int'>"):
-        PositiveInteger.check(1.1)
-        
-    assert PositiveFloat.check(1.1) == 1.1
-    with pytest.raises(ValueError, match="must be >= 0"):
+    assert PositiveInteger.check(10) == 10
+    with pytest.raises(TypeError):
+        PositiveInteger.check(10.5)
+    with pytest.raises(ValueError):
+        PositiveInteger.check(-5)
+
+    assert PositiveFloat.check(1.5) == 1.5
+    with pytest.raises(TypeError):
+        PositiveFloat.check("1.5")
+    with pytest.raises(ValueError):
         PositiveFloat.check(-0.1)
-        
-    assert NonEmptyString.check("x") == "x"
-    with pytest.raises(ValueError, match="must be non-empty"):
+
+    assert NonEmptyString.check("hello") == "hello"
+    with pytest.raises(TypeError):
+        NonEmptyString.check(123)
+    with pytest.raises(ValueError):
         NonEmptyString.check("")
+
 
 def test_isvalidator():
     assert isvalidator(Validator) is True
     assert isvalidator(PositiveInteger) is True
     assert isvalidator(int) is False
     assert isvalidator("not a class") is False
-
-def test_validated_decorator():
-    @validated
-    def func(x: Integer, y: Positive):
-        return x + y
-
-    assert func(1, 2) == 3
-    with pytest.raises(TypeError, match="Bad Arguments"):
-        func("a", -1)
-
-def test_validated_return_check():
-    @validated
-    def func(x: Integer) -> Positive:
-        return x
-    
-    assert func(5) == 5
-    with pytest.raises(TypeError, match="Bad return: must be >= 0"):
-        func(-1)
-
-def test_enforce_decorator():
-    @enforce(x=Integer, y=Positive, return_=Positive)
-    def func(x, y):
-        return x + y
-
-    assert func(1, 2) == 3
-    with pytest.raises(TypeError, match="Bad Arguments"):
-        func(1.1, -1)
-    # The original test failed because it expected a return check error, 
-    # but the argument check (y=-2) triggers first.
-    with pytest.raises(TypeError, match="Bad Arguments"):
-        func(1, -2)
-
-def test_validator_subclass_registry():
-    class NewValidator(Validator):
+    class NotAValidator:
         pass
-    assert "NewValidator" in Validator.validators
-    assert Validator.validators["NewValidator"] is NewValidator
+    assert isvalidator(NotAValidator) is False
 
-def test_validated_no_annotations():
+
+def test_validated_decorator_success():
     @validated
-    def simple(x, y):
+    def add(x: PositiveInteger, y: PositiveInteger) -> PositiveInteger:
         return x + y
-    assert simple(1, 2) == 3
 
-def test_enforce_no_annotations():
-    @enforce()
-    def simple(x, y):
-        return x + y
-    assert simple(1, 2) == 3
+    assert add(2, 3) == 5
 
-def test_validator_set_name():
-    class Container:
-        v = Validator()
-    
-    assert Container.v.name == 'v'
 
-def test_validated_partial_annotations():
+def test_validated_decorator_bad_arguments():
     @validated
-    def func(x: Integer, y):
+    def add(x: PositiveInteger, y: PositiveInteger):
         return x + y
-    
-    assert func(1, 2) == 3
-    with pytest.raises(TypeError, match="Bad Arguments"):
-        func("a", 1)
 
-def test_enforce_partial_annotations():
+    with pytest.raises(TypeError) as exc_info:
+        add(-1, "abc")
+    msg = str(exc_info.value)
+    assert "Bad Arguments" in msg
+    assert "x:" in msg
+    assert "y:" in msg
+
+
+def test_validated_decorator_bad_return():
+    @validated
+    def bad_add(x: PositiveInteger) -> PositiveInteger:
+        return -5
+
+    with pytest.raises(TypeError) as exc_info:
+        bad_add(5)
+    assert "Bad return:" in str(exc_info.value)
+
+
+def test_validated_decorator_no_return_annotation():
+    @validated
+    def no_return(x: PositiveInteger):
+        return x
+
+    assert no_return(10) == 10
+
+
+def test_enforce_decorator_success():
+    @enforce(x=PositiveInteger, y=PositiveInteger, return_=PositiveInteger)
+    def multiply(x, y):
+        return x * y
+
+    assert multiply(3, 4) == 12
+
+
+def test_enforce_decorator_bad_arguments():
+    @enforce(x=PositiveInteger)
+    def identity(x):
+        return x
+
+    with pytest.raises(TypeError) as exc_info:
+        identity(-10)
+    assert "Bad Arguments" in str(exc_info.value)
+    assert "x:" in str(exc_info.value)
+
+
+def test_enforce_decorator_bad_return():
+    @enforce(return_=PositiveInteger)
+    def negative_result():
+        return -1
+
+    with pytest.raises(TypeError) as exc_info:
+        negative_result()
+    assert "Bad return:" in str(exc_info.value)
+
+
+def test_enforce_decorator_no_return_enforcement():
     @enforce(x=Integer)
-    def func(x, y):
-        return x + y
-    
-    assert func(1, 2) == 3
-    with pytest.raises(TypeError, match="Bad Arguments"):
-        func("a", 1)
+    def just_x(x):
+        return x
+
+    assert just_x(42) == 42
