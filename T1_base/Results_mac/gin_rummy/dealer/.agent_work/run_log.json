@@ -1,0 +1,91 @@
+{
+  "summary": {
+    "outcome": "green_first_shot",
+    "green": true,
+    "repair_rounds": 0,
+    "pruned_tests": [],
+    "tests_passed": 5,
+    "line_coverage": 1.0,
+    "branch_coverage": 1.0,
+    "mutation_score": 1.0,
+    "mutants_completed": 1,
+    "mutants_total": 1,
+    "mutation_sampled": false,
+    "total_seconds": 5.0,
+    "llm_calls": 1
+  },
+  "events": [
+    {
+      "t": 0.05,
+      "kind": "setup",
+      "project": "gin_rummy",
+      "module": "dealer",
+      "import_style": "package",
+      "import_module": "gin_rummy.dealer",
+      "public": 1,
+      "sketch_chars": 1547
+    },
+    {
+      "t": 0.07,
+      "kind": "generate",
+      "prompt_chars": 5210,
+      "temperature": 0.3
+    },
+    {
+      "t": 3.87,
+      "kind": "llm_done",
+      "stage": "generate",
+      "attempts": 1,
+      "latency": 3.8,
+      "first_token": 1.9,
+      "out_tokens": 774,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 4.07,
+      "kind": "validate",
+      "stage": "generate",
+      "ok": true,
+      "passed": 5,
+      "failed": 0,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 4.32,
+      "kind": "measure_initial",
+      "lines": "100.0%",
+      "branches": "100.0%",
+      "missing_lines": 0,
+      "secs": 0.2,
+      "error": ""
+    },
+    {
+      "t": 4.32,
+      "kind": "mutate",
+      "budget": "40s"
+    },
+    {
+      "t": 5.02,
+      "kind": "mutate_done",
+      "score": "100.0%",
+      "completed": "1/1",
+      "killed": 1,
+      "survived": 0,
+      "incompetent": 0,
+      "sampled": false,
+      "secs": 0.7,
+      "error": ""
+    },
+    {
+      "t": 5.02,
+      "kind": "finalize",
+      "outcome": "green_first_shot",
+      "tests": 5,
+      "rounds": 0,
+      "total": "5.0s"
+    }
+  ]
+}

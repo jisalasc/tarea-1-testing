@@ -32,15 +32,17 @@ El sistema cuenta con un reloj de cuenta regresiva basado en un límite global.
 | ----------------------------------------- | --------------- | ----------------------------------------------- |
 | Tiempo total por módulo                   | 240 s           | `BUDGET_SECONDS`                                |
 | Reserva de tiempo para finalización       | 8 s             | `FINALIZE_RESERVE`                              |
-| Tiempo mínimo para intentar un ciclo LLM  | 20 s            | `MIN_SECONDS_FOR_LLM_CYCLE`                     |
-| Rondas máximas de reparación              | 2               | `MAX_REPAIR_ROUNDS`                             |
-| Temperaturas (Generación / Rep 1 / Rep 2) | 0.3 / 0.3 / 0.6 | `REPAIR_TEMPERATURES`                           |
-| Presupuesto de mutación (Máximo / Mínimo) | 40 s / 8 s      | `MAX_MUTATION_SECONDS` / `MIN_MUTATION_SECONDS` |
+| Mínimo para otra ronda (LLM + pytest) | 12 s + timeout de pytest | `LLM_CYCLE_SECONDS` |
+| Rondas máximas de reparación | 3 | `MAX_REPAIR_ROUNDS` |
+| Temperaturas (Generación / Rep 1 / Rep 2 / Rep 3) | 0.3 / 0.3 / 0.6 / 0.8 | `REPAIR_TEMPERATURES` |
+| Presupuesto de mutación (Máximo / Mínimo) | 100 s / 8 s | `MAX_MUTATION_SECONDS` / `MIN_MUTATION_SECONDS` |
+| Timeout de pytest (calibrado al entorno) | 8 × segundos del setup, entre 20 s y 90 s; se duplica si pytest se corta antes de terminar el primer test | `PYTEST_TIMEOUT_MIN`, `PYTEST_TIMEOUT_MAX`, `SLOW_ENV_FACTOR` |
+| Timeout de coverage | máx(45 s, 2.5 × timeout de pytest) | `COVERAGE_TIMEOUT_MIN` |
 
 ### 4.2. Especificaciones de Herramientas y LLM
 
-- **LLM:** Se utiliza el modelo `gemini-3.1-flash-lite` a través de la SDK `google-genai`. En rondas de reparación, el prompt incorpora como máximo los primeros 5 fallos, con _tracebacks_ limitados a 900 caracteres. Las llamadas cuentan con un _timeout_ estricto de 35 segundos.
-- **Subprocesos:** Pytest posee un _timeout_ de 20 segundos; `coverage` un límite de 45 segundos.
+- **LLM:** Se utiliza el modelo `gemini-3.5-flash-lite` a través de la SDK `google-genai`. En rondas de reparación, el prompt incorpora como máximo los primeros 5 fallos, con _tracebacks_ limitados a 900 caracteres. Las llamadas cuentan con un _timeout_ estricto de 35 segundos, hasta 8 intentos por llamada, y esperas de 0.5 s tras un timeout y de 1, 2, 4 y luego 4 s fijos tras un 429/5xx.
+- **Subprocesos:** El _timeout_ de pytest se calibra con lo que tardó el setup en esa máquina (20 s en una máquina rápida, hasta 90 s en una lenta) y se duplica si pytest se corta antes de terminar el primer test; `coverage` usa máx(45 s, 2.5 × pytest). Esto evita que una máquina lenta convierta tests correctos en "colgados".
 - **Mutación (Cosmic-ray):** Configurado con `module-path` apuntando únicamente al archivo objetivo. La lista de mutantes evaluados (`ORDER BY random()`) representa una muestra probabilística de las debilidades del código en caso de exceder el presupuesto de tiempo.
 
 ### 4.3. Bitácora de Ejecución (`run_log.json`)
@@ -81,16 +83,16 @@ El agente escribe un historial completo de la ejecución, útil para debugear la
 ### Presupuestos de tiempo actuales
 
 Todas cambiables y discutibles, en mi compu se corren bien
-Reloj único: 120 s desde que parte main
+Reloj único: 240 s desde que parte main
 
 | Qué                                                          | Valor           | Dónde                                          |
 | ------------------------------------------------------------ | --------------- | ---------------------------------------------- |
-| total                                                        | 120 s           | `BUDGET_SECONDS`                               |
+| total | 240 s | `BUDGET_SECONDS` |
 | Reservado para escribir                                      | 8 s             | `FINALIZE_RESERVE`                             |
-| Mínimo para intentar otra ronda de reparación (LLM + pytest) | 20 s            | `MIN_SECONDS_FOR_LLM_CYCLE`                    |
-| Rondas max                                                   | 2               | `MAX_REPAIR_ROUNDS`                            |
-| Temperatura: generación / reparación 1 / reparación 2        | 0.3 / 0.3 / 0.6 | `REPAIR_TEMPERATURES`                          |
-| Cosmic-ray: tope y mínimo                                    | 40 s / 8 s      | `MAX_MUTATION_SECONDS`, `MIN_MUTATION_SECONDS` |
+| Mínimo para intentar otra ronda de reparación (LLM + pytest) | 12 s + timeout de pytest | `LLM_CYCLE_SECONDS` |
+| Rondas max | 3 | `MAX_REPAIR_ROUNDS` |
+| Temperatura: generación / reparación 1 / 2 / 3 | 0.3 / 0.3 / 0.6 / 0.8 | `REPAIR_TEMPERATURES` |
+| Cosmic-ray: tope y mínimo | 100 s / 8 s | `MAX_MUTATION_SECONDS`, `MIN_MUTATION_SECONDS` |
 
 **Llamadas LLM** :
 
@@ -98,9 +100,9 @@ Reloj único: 120 s desde que parte main
 | ------------------------------------------------- | --------------------------------------- |
 | Watchdog: claude dijo esto entre chunks           | 9 s                                     |
 | Tope total por llamada                            | 35 s (y `X-Server-Timeout` = 35)        |
-| Intentos máximos por llamada                      | 4                                       |
+| Intentos máximos por llamada | 8 |
 | Mínimo de tiempo restante para iniciar un intento | 10 s                                    |
-| Espera tras timeout / tras 429 o 5xx              | 0.5 s / 1, 2, 4 s (+ 0 a 0.4 s de azar) |
+| Espera tras timeout / tras 429 o 5xx | 0.5 s / 1, 2, 4 s y luego 4 s fijo (+ 0 a 0.4 s de azar) |
 | Códigos HTTP que se reintentan                    | 408, 429, 500, 502, 503, 504            |
 | Tokens de salida máximos                          | 6000                                    |
 
@@ -110,10 +112,10 @@ Reloj único: 120 s desde que parte main
 
 | Qué                                                      | Valor                              |
 | -------------------------------------------------------- | ---------------------------------- |
-| pytest de validación (más que esto es un cuelgue)        | 20 s                               |
-| coverage                                                 | 45 s                               |
-| cosmic-ray: timeout por corrida de tests de cada mutante | 5 s                                |
-| cosmic-ray: `init`                                       | mínimo entre 25 s y el presupuesto |
+| pytest de validación (calibrado: 8 × tiempo de setup, entre 20 y 90 s; se duplica si se corta antes del primer test) | 20 s en máquina rápida |
+| coverage | máx(45 s, 2.5 × timeout de pytest) |
+| cosmic-ray: timeout por corrida de tests de cada mutante | máx(5 s, timeout de pytest / 2) |
+| cosmic-ray: `init`                                       | mínimo entre 40 s y el presupuesto |
 | cosmic-ray: espera tras SIGINT antes de matar            | 5 s                                |
 | Prueba de import en subproceso                           | 20 s                               |
 

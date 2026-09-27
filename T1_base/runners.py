@@ -250,7 +250,7 @@ def run_mutation(test_file: str, cwd: str, target_file: str, work_dir: str,
     try:
         r = subprocess.run([sys.executable, "-m", "cosmic_ray.cli", "init", toml_path, db_path],
                            cwd=cwd, env=_ENV, capture_output=True, text=True,
-                           timeout=max(5.0, min(25.0, time_budget)))
+                           timeout=max(5.0, min(40.0, time_budget)))
         if r.returncode != 0:
             res.error = "init falló: " + (r.stderr.strip().splitlines() or ["?"])[-1]
             return res

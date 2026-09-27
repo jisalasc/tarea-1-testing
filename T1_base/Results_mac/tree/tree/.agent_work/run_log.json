@@ -1,0 +1,154 @@
+{
+  "summary": {
+    "outcome": "green_after_repair",
+    "green": true,
+    "repair_rounds": 2,
+    "pruned_tests": [],
+    "tests_passed": 15,
+    "line_coverage": 1.0,
+    "branch_coverage": 1.0,
+    "mutation_score": 0.7359550561797753,
+    "mutants_completed": 178,
+    "mutants_total": 178,
+    "mutation_sampled": false,
+    "total_seconds": 114.6,
+    "llm_calls": 3
+  },
+  "events": [
+    {
+      "t": 0.83,
+      "kind": "clock",
+      "setup_secs": 0.8,
+      "pytest_timeout": 20,
+      "coverage_timeout": 50
+    },
+    {
+      "t": 0.83,
+      "kind": "setup",
+      "project": "tree",
+      "module": "tree",
+      "import_style": "flat",
+      "import_module": "tree",
+      "public": 1,
+      "sketch_chars": 251
+    },
+    {
+      "t": 0.85,
+      "kind": "generate",
+      "prompt_chars": 8867,
+      "temperature": 0.3
+    },
+    {
+      "t": 8.47,
+      "kind": "llm_done",
+      "stage": "generate",
+      "attempts": 1,
+      "latency": 7.6,
+      "first_token": 2.0,
+      "out_tokens": 2394,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 9.01,
+      "kind": "validate",
+      "stage": "generate",
+      "ok": false,
+      "passed": 13,
+      "failed": 2,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.5
+    },
+    {
+      "t": 9.01,
+      "kind": "repair1",
+      "prompt_chars": 14867,
+      "temperature": 0.3
+    },
+    {
+      "t": 15.08,
+      "kind": "llm_done",
+      "stage": "repair1",
+      "attempts": 1,
+      "latency": 6.1,
+      "first_token": 0.9,
+      "out_tokens": 2412,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 15.6,
+      "kind": "validate",
+      "stage": "repair1",
+      "ok": false,
+      "passed": 14,
+      "failed": 1,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.5
+    },
+    {
+      "t": 15.6,
+      "kind": "repair2",
+      "prompt_chars": 13952,
+      "temperature": 0.6
+    },
+    {
+      "t": 21.62,
+      "kind": "llm_done",
+      "stage": "repair2",
+      "attempts": 1,
+      "latency": 6.0,
+      "first_token": 0.9,
+      "out_tokens": 2435,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 22.13,
+      "kind": "validate",
+      "stage": "repair2",
+      "ok": true,
+      "passed": 15,
+      "failed": 0,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.5
+    },
+    {
+      "t": 22.71,
+      "kind": "measure_initial",
+      "lines": "100.0%",
+      "branches": "100.0%",
+      "missing_lines": 0,
+      "secs": 0.6,
+      "error": ""
+    },
+    {
+      "t": 22.71,
+      "kind": "mutate",
+      "budget": "100s"
+    },
+    {
+      "t": 114.58,
+      "kind": "mutate_done",
+      "score": "73.6%",
+      "completed": "178/178",
+      "killed": 131,
+      "survived": 47,
+      "incompetent": 0,
+      "sampled": false,
+      "secs": 91.9,
+      "error": ""
+    },
+    {
+      "t": 114.58,
+      "kind": "finalize",
+      "outcome": "green_after_repair",
+      "tests": 15,
+      "rounds": 2,
+      "total": "114.6s"
+    }
+  ]
+}

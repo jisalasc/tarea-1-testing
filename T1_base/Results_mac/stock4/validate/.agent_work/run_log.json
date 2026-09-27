@@ -1,0 +1,119 @@
+{
+  "summary": {
+    "outcome": "green_after_repair",
+    "green": true,
+    "repair_rounds": 1,
+    "pruned_tests": [],
+    "tests_passed": 16,
+    "line_coverage": 1.0,
+    "branch_coverage": 1.0,
+    "mutation_score": 0.9310344827586207,
+    "mutants_completed": 58,
+    "mutants_total": 58,
+    "mutation_sampled": false,
+    "total_seconds": 17.6,
+    "llm_calls": 2
+  },
+  "events": [
+    {
+      "t": 0.02,
+      "kind": "setup",
+      "project": "stock4",
+      "module": "validate",
+      "import_style": "package",
+      "import_module": "stock4.validate",
+      "public": 10,
+      "sketch_chars": 0
+    },
+    {
+      "t": 0.04,
+      "kind": "generate",
+      "prompt_chars": 6456,
+      "temperature": 0.3
+    },
+    {
+      "t": 5.12,
+      "kind": "llm_done",
+      "stage": "generate",
+      "attempts": 1,
+      "latency": 5.1,
+      "first_token": 1.7,
+      "out_tokens": 1410,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 5.3,
+      "kind": "validate",
+      "stage": "generate",
+      "ok": false,
+      "passed": 14,
+      "failed": 2,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 5.3,
+      "kind": "repair1",
+      "prompt_chars": 10606,
+      "temperature": 0.3
+    },
+    {
+      "t": 8.9,
+      "kind": "llm_done",
+      "stage": "repair1",
+      "attempts": 1,
+      "latency": 3.6,
+      "first_token": 0.8,
+      "out_tokens": 1411,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 9.04,
+      "kind": "validate",
+      "stage": "repair1",
+      "ok": true,
+      "passed": 16,
+      "failed": 0,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.1
+    },
+    {
+      "t": 9.26,
+      "kind": "measure_initial",
+      "lines": "100.0%",
+      "branches": "100.0%",
+      "missing_lines": 0,
+      "secs": 0.2,
+      "error": ""
+    },
+    {
+      "t": 9.26,
+      "kind": "mutate",
+      "budget": "40s"
+    },
+    {
+      "t": 17.59,
+      "kind": "mutate_done",
+      "score": "93.1%",
+      "completed": "58/58",
+      "killed": 54,
+      "survived": 4,
+      "incompetent": 0,
+      "sampled": false,
+      "secs": 8.3,
+      "error": ""
+    },
+    {
+      "t": 17.59,
+      "kind": "finalize",
+      "outcome": "green_after_repair",
+      "tests": 16,
+      "rounds": 1,
+      "total": "17.6s"
+    }
+  ]
+}

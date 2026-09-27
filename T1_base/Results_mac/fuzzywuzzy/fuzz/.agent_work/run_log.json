@@ -1,0 +1,152 @@
+{
+  "summary": {
+    "outcome": "green_after_repair",
+    "green": true,
+    "repair_rounds": 2,
+    "pruned_tests": [],
+    "tests_passed": 34,
+    "line_coverage": 0.9692307692307692,
+    "branch_coverage": 0.9444444444444444,
+    "mutation_score": 0.6575875486381323,
+    "mutants_completed": 257,
+    "mutants_total": 344,
+    "mutation_sampled": true,
+    "total_seconds": 56.5,
+    "llm_calls": 3
+  },
+  "events": [
+    {
+      "t": 0.08,
+      "kind": "setup",
+      "project": "fuzzywuzzy",
+      "module": "fuzz",
+      "import_style": "package",
+      "import_module": "fuzzywuzzy.fuzz",
+      "public": 10,
+      "sketch_chars": 753
+    },
+    {
+      "t": 0.1,
+      "kind": "generate",
+      "prompt_chars": 13211,
+      "temperature": 0.3
+    },
+    {
+      "t": 6.32,
+      "kind": "llm_done",
+      "stage": "generate",
+      "attempts": 1,
+      "latency": 6.2,
+      "first_token": 1.8,
+      "out_tokens": 1822,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 6.53,
+      "kind": "validate",
+      "stage": "generate",
+      "ok": false,
+      "passed": 28,
+      "failed": 6,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 6.53,
+      "kind": "repair1",
+      "prompt_chars": 17992,
+      "temperature": 0.3
+    },
+    {
+      "t": 11.21,
+      "kind": "llm_done",
+      "stage": "repair1",
+      "attempts": 1,
+      "latency": 4.7,
+      "first_token": 0.9,
+      "out_tokens": 1820,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 11.41,
+      "kind": "validate",
+      "stage": "repair1",
+      "ok": false,
+      "passed": 32,
+      "failed": 2,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 11.41,
+      "kind": "repair2",
+      "prompt_chars": 17781,
+      "temperature": 0.6
+    },
+    {
+      "t": 16.06,
+      "kind": "llm_done",
+      "stage": "repair2",
+      "attempts": 1,
+      "latency": 4.7,
+      "first_token": 0.9,
+      "out_tokens": 1801,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 16.23,
+      "kind": "validate",
+      "stage": "repair2",
+      "ok": true,
+      "passed": 34,
+      "failed": 0,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 16.47,
+      "kind": "measure_initial",
+      "lines": "96.9%",
+      "branches": "94.4%",
+      "missing_lines": 4,
+      "secs": 0.2,
+      "error": ""
+    },
+    {
+      "t": 16.47,
+      "kind": "mutate",
+      "budget": "40s"
+    },
+    {
+      "t": 56.51,
+      "kind": "mutate_done",
+      "score": "65.8%",
+      "completed": "257/344",
+      "killed": 169,
+      "survived": 88,
+      "incompetent": 0,
+      "sampled": true,
+      "secs": 40.0,
+      "error": ""
+    },
+    {
+      "t": 56.51,
+      "kind": "warning",
+      "detail": "cosmic-ray dejó el objetivo mutado; se restauró desde el snapshot"
+    },
+    {
+      "t": 56.51,
+      "kind": "finalize",
+      "outcome": "green_after_repair",
+      "tests": 34,
+      "rounds": 2,
+      "total": "56.5s"
+    }
+  ]
+}

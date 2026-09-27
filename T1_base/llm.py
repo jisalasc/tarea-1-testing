@@ -16,6 +16,7 @@ MODEL = "gemini-3.5-flash-lite"
 # MODEL = "gemini-3.1-flash-lite"
 RETRYABLE_CODES = {408, 429, 500, 502, 503, 504}
 MIN_USEFUL_SECONDS = 10.0
+MAX_BACKOFF_SECONDS = 4.0
 
 logging.getLogger("google_genai").setLevel(logging.ERROR)
 
@@ -54,7 +55,7 @@ class LLMClient:
 
     # Crea el cliente con el timeout de lectura (watchdog) y la cabecera de timeout del servidor.
     def __init__(self, model: str = MODEL, first_token_timeout: float = 9.0,
-                 call_timeout: float = 35.0, max_attempts: int = 4, verbose: bool = True):
+                 call_timeout: float = 35.0, max_attempts: int = 8, verbose: bool = True):
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise LLMError("No se encontró GEMINI_API_KEY en el entorno.")
@@ -110,7 +111,7 @@ class LLMClient:
                 self._log(f"LLM {type(e).__name__} (intento {attempt}); reintento")
             remaining = deadline - time.monotonic()
             base = 0.5 if events[-1].endswith(("Timeout", "TimeoutException", "ReadTimeout", "CallTimeout")) \
-                else 1.0 * (2 ** (attempt - 1))
+                else min(MAX_BACKOFF_SECONDS, 1.0 * (2 ** (attempt - 1)))
             delay = min(base + random.uniform(0, 0.4), max(0.0, remaining - MIN_USEFUL_SECONDS))
             if delay > 0:
                 time.sleep(delay)

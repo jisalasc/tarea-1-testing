@@ -1,0 +1,96 @@
+{
+  "summary": {
+    "outcome": "green_first_shot",
+    "green": true,
+    "repair_rounds": 0,
+    "pruned_tests": [],
+    "tests_passed": 9,
+    "line_coverage": 0.9736842105263158,
+    "branch_coverage": 0.8333333333333334,
+    "mutation_score": 0.6746987951807228,
+    "mutants_completed": 83,
+    "mutants_total": 171,
+    "mutation_sampled": true,
+    "total_seconds": 47.5,
+    "llm_calls": 1
+  },
+  "events": [
+    {
+      "t": 0.83,
+      "kind": "setup",
+      "project": "tree",
+      "module": "base",
+      "import_style": "flat",
+      "import_module": "base",
+      "public": 7,
+      "sketch_chars": 0
+    },
+    {
+      "t": 0.84,
+      "kind": "generate",
+      "prompt_chars": 4363,
+      "temperature": 0.3
+    },
+    {
+      "t": 6.41,
+      "kind": "llm_done",
+      "stage": "generate",
+      "attempts": 1,
+      "latency": 5.6,
+      "first_token": 1.6,
+      "out_tokens": 1551,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 6.91,
+      "kind": "validate",
+      "stage": "generate",
+      "ok": true,
+      "passed": 9,
+      "failed": 0,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.5
+    },
+    {
+      "t": 7.48,
+      "kind": "measure_initial",
+      "lines": "97.4%",
+      "branches": "83.3%",
+      "missing_lines": 1,
+      "secs": 0.6,
+      "error": ""
+    },
+    {
+      "t": 7.48,
+      "kind": "mutate",
+      "budget": "40s"
+    },
+    {
+      "t": 47.51,
+      "kind": "mutate_done",
+      "score": "67.5%",
+      "completed": "83/171",
+      "killed": 56,
+      "survived": 27,
+      "incompetent": 0,
+      "sampled": true,
+      "secs": 40.0,
+      "error": ""
+    },
+    {
+      "t": 47.51,
+      "kind": "warning",
+      "detail": "cosmic-ray dejó el objetivo mutado; se restauró desde el snapshot"
+    },
+    {
+      "t": 47.51,
+      "kind": "finalize",
+      "outcome": "green_first_shot",
+      "tests": 9,
+      "rounds": 0,
+      "total": "47.5s"
+    }
+  ]
+}

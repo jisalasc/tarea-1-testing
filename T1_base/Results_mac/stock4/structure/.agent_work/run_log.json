@@ -1,0 +1,262 @@
+{
+  "summary": {
+    "outcome": "green_after_prune",
+    "green": true,
+    "repair_rounds": 3,
+    "pruned_tests": [
+      "test_structure_init_and_attributes",
+      "test_typed_structure",
+      "test_structure_types_default_identity"
+    ],
+    "tests_passed": 8,
+    "line_coverage": 0.7636363636363637,
+    "branch_coverage": 0.5714285714285714,
+    "mutation_score": 0.5555555555555556,
+    "mutants_completed": 45,
+    "mutants_total": 45,
+    "mutation_sampled": false,
+    "total_seconds": 22.9,
+    "llm_calls": 5
+  },
+  "events": [
+    {
+      "t": 0.02,
+      "kind": "clock",
+      "setup_secs": 0.0,
+      "pytest_timeout": 20,
+      "coverage_timeout": 50
+    },
+    {
+      "t": 0.02,
+      "kind": "setup",
+      "project": "stock4",
+      "module": "structure",
+      "import_style": "package",
+      "import_module": "stock4.structure",
+      "public": 4,
+      "sketch_chars": 597
+    },
+    {
+      "t": 0.05,
+      "kind": "generate",
+      "prompt_chars": 6127,
+      "temperature": 0.3
+    },
+    {
+      "t": 4.48,
+      "kind": "llm_done",
+      "stage": "generate",
+      "attempts": 1,
+      "latency": 4.4,
+      "first_token": 1.8,
+      "out_tokens": 973,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 4.68,
+      "kind": "validate",
+      "stage": "generate",
+      "ok": false,
+      "passed": 3,
+      "failed": 8,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 4.68,
+      "kind": "repair1",
+      "prompt_chars": 8813,
+      "temperature": 0.3
+    },
+    {
+      "t": 7.36,
+      "kind": "llm_done",
+      "stage": "repair1",
+      "attempts": 1,
+      "latency": 2.7,
+      "first_token": 0.9,
+      "out_tokens": 868,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 7.53,
+      "kind": "validate",
+      "stage": "repair1",
+      "ok": false,
+      "passed": 8,
+      "failed": 3,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 7.53,
+      "kind": "repair2",
+      "prompt_chars": 8333,
+      "temperature": 0.6
+    },
+    {
+      "t": 10.43,
+      "kind": "llm_done",
+      "stage": "repair2",
+      "attempts": 1,
+      "latency": 2.9,
+      "first_token": 1.0,
+      "out_tokens": 923,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 10.61,
+      "kind": "validate",
+      "stage": "repair2",
+      "ok": false,
+      "passed": 4,
+      "failed": 7,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 10.61,
+      "kind": "repair_worse",
+      "detail": "la reparación no mejoró; se conserva la versión anterior"
+    },
+    {
+      "t": 10.61,
+      "kind": "repair3",
+      "prompt_chars": 8333,
+      "temperature": 0.8
+    },
+    {
+      "t": 13.68,
+      "kind": "llm_done",
+      "stage": "repair3",
+      "attempts": 1,
+      "latency": 3.1,
+      "first_token": 0.9,
+      "out_tokens": 931,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 13.85,
+      "kind": "validate",
+      "stage": "repair3",
+      "ok": false,
+      "passed": 4,
+      "failed": 7,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 13.85,
+      "kind": "repair_worse",
+      "detail": "la reparación no mejoró; se conserva la versión anterior"
+    },
+    {
+      "t": 13.85,
+      "kind": "prune",
+      "removed": 3,
+      "detail": "test_structure_init_and_attributes, test_typed_structure, test_structure_types_default_identity"
+    },
+    {
+      "t": 13.97,
+      "kind": "validate",
+      "stage": "prune",
+      "ok": true,
+      "passed": 8,
+      "failed": 0,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.1
+    },
+    {
+      "t": 14.19,
+      "kind": "measure_initial",
+      "lines": "76.4%",
+      "branches": "57.1%",
+      "missing_lines": 13,
+      "secs": 0.2,
+      "error": ""
+    },
+    {
+      "t": 14.19,
+      "kind": "enhance",
+      "detail": "Cobertura bajo umbral. Solicitando nuevos tests al LLM..."
+    },
+    {
+      "t": 14.19,
+      "kind": "enhance",
+      "prompt_chars": 5729,
+      "temperature": 0.4
+    },
+    {
+      "t": 15.97,
+      "kind": "llm_done",
+      "stage": "enhance",
+      "attempts": 1,
+      "latency": 1.8,
+      "first_token": 1.2,
+      "out_tokens": 240,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 16.14,
+      "kind": "validate",
+      "stage": "enhance_validate",
+      "ok": false,
+      "passed": 9,
+      "failed": 2,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 16.14,
+      "kind": "enhance_reject",
+      "detail": "Los tests adicionales fallaron. Revirtiendo cambios."
+    },
+    {
+      "t": 16.25,
+      "kind": "validate",
+      "stage": "rollback",
+      "ok": true,
+      "passed": 8,
+      "failed": 0,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.1
+    },
+    {
+      "t": 16.25,
+      "kind": "mutate",
+      "budget": "100s"
+    },
+    {
+      "t": 22.92,
+      "kind": "mutate_done",
+      "score": "55.6%",
+      "completed": "45/45",
+      "killed": 25,
+      "survived": 20,
+      "incompetent": 0,
+      "sampled": false,
+      "secs": 6.7,
+      "error": ""
+    },
+    {
+      "t": 22.92,
+      "kind": "finalize",
+      "outcome": "green_after_prune",
+      "tests": 8,
+      "rounds": 3,
+      "total": "22.9s"
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "summary": {
+    "outcome": "green_first_shot",
+    "green": true,
+    "repair_rounds": 0,
+    "pruned_tests": [],
+    "tests_passed": 7,
+    "line_coverage": 0.9803921568627451,
+    "branch_coverage": 0.8888888888888888,
+    "mutation_score": 0.88,
+    "mutants_completed": 50,
+    "mutants_total": 50,
+    "mutation_sampled": false,
+    "total_seconds": 12.0,
+    "llm_calls": 1
+  },
+  "events": [
+    {
+      "t": 0.02,
+      "kind": "setup",
+      "project": "fuzzywuzzy",
+      "module": "StringMatcher",
+      "import_style": "package",
+      "import_module": "fuzzywuzzy.StringMatcher",
+      "public": 1,
+      "sketch_chars": 0
+    },
+    {
+      "t": 0.04,
+      "kind": "generate",
+      "prompt_chars": 5273,
+      "temperature": 0.3
+    },
+    {
+      "t": 3.97,
+      "kind": "llm_done",
+      "stage": "generate",
+      "attempts": 1,
+      "latency": 3.9,
+      "first_token": 1.2,
+      "out_tokens": 1175,
+      "finish": "FinishReason.STOP",
+      "events": []
+    },
+    {
+      "t": 4.15,
+      "kind": "validate",
+      "stage": "generate",
+      "ok": true,
+      "passed": 7,
+      "failed": 0,
+      "errors": 0,
+      "collection_error": false,
+      "secs": 0.2
+    },
+    {
+      "t": 4.37,
+      "kind": "measure_initial",
+      "lines": "98.0%",
+      "branches": "88.9%",
+      "missing_lines": 1,
+      "secs": 0.2,
+      "error": ""
+    },
+    {
+      "t": 4.37,
+      "kind": "mutate",
+      "budget": "40s"
+    },
+    {
+      "t": 11.99,
+      "kind": "mutate_done",
+      "score": "88.0%",
+      "completed": "50/50",
+      "killed": 44,
+      "survived": 6,
+      "incompetent": 0,
+      "sampled": false,
+      "secs": 7.6,
+      "error": ""
+    },
+    {
+      "t": 11.99,
+      "kind": "finalize",
+      "outcome": "green_first_shot",
+      "tests": 7,
+      "rounds": 0,
+      "total": "12.0s"
+    }
+  ]
+}

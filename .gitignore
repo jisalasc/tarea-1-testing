@@ -10,3 +10,5 @@ __pycache__/
 *.sqlite
 .pytest_cache/
 T1_base/Results/**/.agent_work/
+T1_base/Results_mac/**/.agent_work/*
+!T1_base/Results_mac/**/.agent_work/run_log.json

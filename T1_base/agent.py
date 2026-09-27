@@ -20,11 +20,15 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 BUDGET_SECONDS = 240.0
 FINALIZE_RESERVE = 8.0
-MIN_SECONDS_FOR_LLM_CYCLE = 20.0
-MAX_REPAIR_ROUNDS = 2
-MAX_MUTATION_SECONDS = 40.0
+LLM_CYCLE_SECONDS = 12.0          # parte LLM de un ciclo; el ciclo completo suma el timeout de pytest
+MAX_REPAIR_ROUNDS = 3
+MAX_MUTATION_SECONDS = 100.0
 MIN_MUTATION_SECONDS = 8.0
-REPAIR_TEMPERATURES = [0.3, 0.6]
+REPAIR_TEMPERATURES = [0.3, 0.6, 0.8]
+PYTEST_TIMEOUT_MIN = 20.0         # timeout de pytest en una máquina rápida
+PYTEST_TIMEOUT_MAX = 90.0         # tope aunque la máquina sea muy lenta
+SLOW_ENV_FACTOR = 8.0             # timeout de pytest = SLOW_ENV_FACTOR x segundos que tardó el setup
+COVERAGE_TIMEOUT_MIN = 45.0
 CHAOS = os.getenv("AGENT_CHAOS", "")
 
 
@@ -192,10 +196,20 @@ def main(ruta_archivo: str, output_folder: str) -> int:
     def remaining() -> float:
         return llm_deadline - time.monotonic()
 
+    # Segundos que necesita un ciclo LLM + pytest con los timeouts calibrados.
+    def cycle_secs() -> float:
+        return LLM_CYCLE_SECONDS + pytest_timeout
+
     # ---- SETUP -----------------------------------------------------------
     target = extractor.load_target(ruta_archivo)
     test_path = os.path.join(output_folder, target.test_file_name)
     header = extractor.build_header(target)
+    # Calibra los timeouts de subprocesos con lo que tardó el setup (import en subproceso + AST).
+    setup_secs = time.monotonic() - t0
+    pytest_timeout = min(PYTEST_TIMEOUT_MAX, max(PYTEST_TIMEOUT_MIN, SLOW_ENV_FACTOR * setup_secs))
+    coverage_timeout = max(COVERAGE_TIMEOUT_MIN, 2.5 * pytest_timeout)
+    log.add("clock", setup_secs=round(setup_secs, 1), pytest_timeout=round(pytest_timeout),
+            coverage_timeout=round(coverage_timeout))
     log.add("setup", project=target.project_name, module=target.module_name,
             import_style=target.import_style, import_module=target.import_module,
             public=len(target.public_names), sketch_chars=len(target.dependency_sketch))
@@ -204,11 +218,18 @@ def main(ruta_archivo: str, output_folder: str) -> int:
 
     # Escribe el test en disco y lo corre con pytest.
     def write_and_validate(code: str, tag: str) -> runners.PytestResult:
+        nonlocal pytest_timeout, coverage_timeout
         with open(test_path, "w", encoding="utf-8") as fh:
             fh.write(assemble_test_file(header, code))
-        pr = runners.run_pytest(test_path, cwd=output_folder)
+        pr = runners.run_pytest(test_path, cwd=output_folder, timeout=pytest_timeout)
         log.add("validate", stage=tag, ok=pr.ok, passed=pr.passed, failed=pr.failed, errors=pr.errors,
                 collection_error=bool(pr.collection_error), secs=round(pr.duration, 1))
+        # Si pytest se cortó sin que ningún test alcanzara a terminar, la máquina es lenta, no el test.
+        if pr.timed_out and pr.passed == 0 and pr.failed <= 1 and pytest_timeout < PYTEST_TIMEOUT_MAX:
+            pytest_timeout = min(PYTEST_TIMEOUT_MAX, pytest_timeout * 2)
+            coverage_timeout = max(COVERAGE_TIMEOUT_MIN, 2.5 * pytest_timeout)
+            log.add("slow_env", pytest_timeout=round(pytest_timeout), coverage_timeout=round(coverage_timeout),
+                    detail="pytest se cortó antes de terminar el primer test; se duplica el timeout")
         if not pr.ok:
             for f in pr.failures[:5]:
                 print(f"             - {f['kind']} {f['nodeid'].split('::')[-1]}: {f['message'][:90]}")
@@ -265,7 +286,7 @@ def main(ruta_archivo: str, output_folder: str) -> int:
         # ---- REPAIR loop -----------------------------------------------------
         max_rounds = 0 if CHAOS == "prune" else MAX_REPAIR_ROUNDS
         while not pr.ok and rounds_used < max_rounds:
-            if remaining() < MIN_SECONDS_FOR_LLM_CYCLE:
+            if remaining() < cycle_secs():
                 log.add("repair_skip", detail=f"quedan {remaining():.0f}s; no alcanza para otra ronda")
                 break
             rounds_used += 1
@@ -299,13 +320,14 @@ def main(ruta_archivo: str, output_folder: str) -> int:
                 outcome = "emergency"
 
     # ---- MEASURE & ENHANCE -------------------------------------------------
-    cov = runners.run_coverage(test_path, cwd=output_folder, target_file=target.file_path, work_dir=work_dir)
+    cov = runners.run_coverage(test_path, cwd=output_folder, target_file=target.file_path, work_dir=work_dir,
+                               timeout=coverage_timeout)
     log.add("measure_initial", lines=f"{cov.line_coverage:.1%}", branches=f"{cov.branch_coverage:.1%}",
             missing_lines=len(cov.missing_lines), secs=round(cov.duration, 1),
             error=cov.error[:80] if cov.error else "")
 
     # Si no cumple el umbral y queda tiempo, pedimos tests adicionales
-    if (cov.line_coverage < 0.80 or cov.branch_coverage < 0.50) and remaining() > MIN_SECONDS_FOR_LLM_CYCLE:
+    if (cov.line_coverage < 0.80 or cov.branch_coverage < 0.50) and remaining() > cycle_secs():
         log.add("enhance", detail="Cobertura bajo umbral. Solicitando nuevos tests al LLM...")
         new_tests = call_llm(prompts.enhance_prompt(target, code, cov.missing_lines), "enhance", temperature=0.4)
         
@@ -317,7 +339,8 @@ def main(ruta_archivo: str, output_folder: str) -> int:
                 code, pr = enhanced_code, pr_enhance
                 outcome = "green_after_enhance"
                 # Volvemos a medir para actualizar metrics.json con el resultado mejorado
-                cov = runners.run_coverage(test_path, cwd=output_folder, target_file=target.file_path, work_dir=work_dir)
+                cov = runners.run_coverage(test_path, cwd=output_folder, target_file=target.file_path, work_dir=work_dir,
+                                           timeout=coverage_timeout)
                 log.add("measure_final", lines=f"{cov.line_coverage:.1%}", branches=f"{cov.branch_coverage:.1%}")
             else:
                 log.add("enhance_reject", detail="Los tests adicionales fallaron. Revirtiendo cambios.")
@@ -332,7 +355,8 @@ def main(ruta_archivo: str, output_folder: str) -> int:
     else:
         log.add("mutate", budget=f"{mut_budget:.0f}s")
         mut = runners.run_mutation(test_path, cwd=output_folder, target_file=target.file_path,
-                                   work_dir=work_dir, time_budget=mut_budget)
+                                   work_dir=work_dir, time_budget=mut_budget,
+                                   per_test_timeout=max(5.0, pytest_timeout / 2))
         log.add("mutate_done", score=f"{mut.mutation_score:.1%}", completed=f"{mut.completed}/{mut.total_mutants}",
                 killed=mut.killed, survived=mut.survived, incompetent=mut.incompetent,
                 sampled=mut.timed_out, secs=round(mut.duration, 1), error=mut.error[:80] if mut.error else "")
