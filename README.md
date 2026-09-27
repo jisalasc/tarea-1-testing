@@ -5,7 +5,7 @@
 El agente orquestador (`agent.py`) implementa una máquina de estados finitos que prioriza obtener una suite funcional (en verde) antes de optimizar sus métricas. El flujo se divide en las siguientes fases:
 
 - **Contextualización (Setup):** Utiliza `extractor.py` para analizar el código objetivo mediante AST, extrayendo las firmas de funciones e imports válidos. Esto contextualiza al LLM y limita las alucinaciones.
-- **Reparación Iterativa:** Si la validación de `pytest` falla, el sistema extrae hasta los 5 primeros fallos con un _traceback_ corto y se los envía al LLM en un ciclo de reparación. Se permiten un máximo de 2 rondas, incrementando la temperatura (de 0.3 a 0.6) para forzar salidas alternativas.
+- **Reparación Iterativa:** Si la validación de `pytest` falla, el sistema extrae hasta los 5 primeros fallos con un _traceback_ corto y se los envía al LLM en un ciclo de reparación. Se permiten un máximo de 3 rondas, incrementando la temperatura (0.3, 0.6 y 0.8) para forzar salidas alternativas.
 - **Poda de Seguridad (Pruning):** Si tras las reparaciones la suite sigue en rojo, el agente recorta los tests que fallan mediante manipulación de AST para salvar el resto de la suite.
 - **Mejora Basada en Métricas (Enhance):** Una vez en verde, se mide la cobertura. Si las líneas son <80% o las ramas <50%, el agente solicita iterativamente pruebas adicionales dirigidas exclusivamente a las líneas no cubiertas, inyectándolas en la suite final.
 - **Fallback de Emergencia:** Si la suite original es irrecuperable, se inyecta un test mínimo de _import_ para garantizar que el archivo compile y otorgue un puntaje base.
@@ -54,125 +54,50 @@ El agente escribe un historial completo de la ejecución, útil para debugear la
 - **`llm_calls`:** Contador de solicitudes exitosas al LLM (excluye reintentos por errores de conexión).
 - **`mutation_sampled`:** Indicador booleano que confirma si la corrida de `cosmic-ray` debió abortarse prematuramente por tiempo.
 
-## Consideraciones y notas Cote
+# Tarea 1: (README versión a mano, para entender código y deschatearlo)
 
-- Los modulos importantes son, `agent.py` core de todo es el orquestador, `extractor.py` primera parte del parser "saca" la clase para mandarla al LLM vía ast, `runners.py` servicios de corrida de coverage y mutation score, `llm.py` lógica de comunicación y conexión api, `prompts.py` prompteo.
-- El agente solo hará el loop de escribir y reescribir prompt, no habrá llamada de tools ni nada raro, hay que evitar que llame a herramientas caras en tiempo.
-- Invariante: Cada versión que pasa pytest en verde queda guardada, PytestResult, si empeora luego de una llamada se puede volver como fallback
-- Mi criterio y enfoque inicial es tener una buena base, comenzar en verde es clave, una vez en verde se le puede dedicar tiempo a mejorar coverage y mutation score de ser necesario, Se priorizan que corran los test sobre cobertura, de hecho solo se hace una ronda y si es que queda tiempo.
-- estoy considerando agregar una tercera revisión, depende el rendimiento con clases más grandes.
-- El orden de corrección es, sintaxis, imports, aserciones y finalmente cobertura.
-- Poda: Si despues de las 2 rondas de reparación no esta en verde, se le dice al LLM que corte los test que fallan.
-- Las llamadas son stateless, con contexto de conversación la mejora era igual pero demoraba más, de hecho de esta forma fue más fácil afinar el prompt.
-- LLM devuelve todo no diffs.
-- Claude me recomendó usar un watchdog para poder ver si nos demoramos por lentitud nuestra o por "mal clima" de la API es decir que mandan nuestras request como de baja prioridad.
-- La reparación bajo lupa es: archivo de test completo + código obj + primeros 5 fallos con traceback corto, con 5 funciona bien no vi necesario aumentar (DISCUTIBLE), se duce que no toque test que fallan, descartadisimo mandar solo test que fallan volver a armar el código era más complejo de lo que pensaba. Por ahora el máximo de reparaciones es 2 `MAX_REPAIR_ROUDS`, claude me recomendo que la primera tenga temperatura de 0.3 y la segunda 0.6 para salir del mismo error, empiricamente comprobado que funciona, entre rondas se conserva la mejor versión. Si tras las rondas siguen en rojo se podan vía ast, luego de esto si se sigue fallando el fallback es dar esta suite por muerta.
+## 1. Algoritmo y Prompts
+El flujo es una secuencia fija de fases, no es un agente que decide cuando parar o que tools usar, cada fase tiene un ebjetivo medible y estados en los cuales transitar, se tomo esta decisión desde un inicio ya que hay que tener el presupuesto de tiempo controlado.
+El flujo en palabras es el siguente:
+- Setup, se extrae el contexto, se verificam los imports y se calibran los timeouts.
+- Generación, se generan los primeros test, es la primera llamada al LLM.
+- Validación, se valida que sea correcta la suite en pytest (verde significa correcta rojo lo contrario), una vez verde se pasa al siguente estado.
+- Corrección, este es opcional, de ser roja la generación se pasa por corrección hasta un máximo de 3 veces, otra llamada a LLM con otro prompt.
+- Poda, otro paso opcional, si luego de las 3 iteraciones de corrección siguen test rojos (por pytest) estos se podan para dejar todo en verde, si siguen habiendo rojos se considera un fallo de mayor magnitu y se cream test de emergencia mínimos (triviales, por ende invalidos)
+- Medición, una vez la suite en verde se mide el coverage (line y branch)
+- Enhancement, si no se cubren los porcentajes presentes en el enunciado hay una ronda (solo 1) de mejora, la cual busca solamente agregar test para aumentar coverage (no toca los antiguos)
+- Mutate, se crean mutantes con cosmic-ray
+- Finalización con entrega de resultados.
 
-### Flujo ideal simplificado
+### Propiedades del flujo
+- El algoritmo esta pensado para priorizar una suite verde por sobre una con altos porcentajes, desde un inicio la decisión fue clara, el motivo es por rubrica y obtener desde un inicio algo presentable, sumado a que mientras iterabamos el agente y veiamos los resultados, partir con una buena base facilita el debug y el prueba y error de prompts.
+- En todo los momentos de la maquina de estados hay un entregable, desde la primera suite hasta la suite más verde (con menos errores), ese es el fallback en caso de quedarnos cortos de tiempo.
+- Comunicación LLM: las llamadas son stateless, se les manda el archivo completo y no hay diffs. Sin historial no hay contexto viejo que confunda, sin diff no hay que parsear o preocuparse de parches (mayor error en la fase iterativa de reparación). Los costos de estos eran de tiempo y más tokens.
+- Para cada modulo se extraen solo firmas, vease, clases, métodos, funciones y constantes, sin vuerpo, es decir un sketch de dependencias AST. Todo esto con el motivo de no dar contexto entero y evitar ruido.
+- La poda nunca toca código objetivo, cuando la reparación no alcanza se borran de los tets las funciones que fallam indexadas por nombre desde la salida de pytest.
+- Empiricamente los mutantes y su score fueron buenos desde el inicio, por lo que quitamos una iteración de mejora para mutation score y simplificamos el flujo, nos quedamos con los mutantes que de cosmic ray en el presupuesto de tiempo que le queda.
 
-- Setup: Extraer clases, hacer imports, ya que hay clases que importan diferente de otras, escribirá cabeceras y un test place-holder
-- Generar: Primera llamada LLM, primera suite de tests
-- Validar: validaciones de pytest (que esten verdes), check de typos y que corra
-- Reparar: Si esta rojo, llamada a LLM para que repare, idealmente por prompt inicial no debería pasar esto, logs y corregir.
-- Medir: Cuando esté en verde meter el coverage y chequear
-- Mejorar: opcional, llamada LLM para mejorar cobertura
-- Mutar: Meter cosimic-ray (librería/api que hace mutantes) meter tope de tiempo
-- Mejorer: opcional, si es bajo el mutation coverage hay que analizar por que
-- Finalizar: escrubir el json de metricas (metric.json) debe pasar lo que dice enunciado sino no se corrige
+### Presupuesto dinámico
+Hay un solo reloj que parte con main (`BUDGET_SECONDS` = 240 s) y ninguna fase tiene un tiempo fijo asignado, cada una pregunta cuanto queda y decide, la idea es que si sobra tiempo lo use la mutación y si falta se recorte desde atras (primero mutación, luego enhancement, luego rondas de corrección), lo único que nunca se recorta es escribir el archivo, para eso se reservan 8 s (`FINALIZE_RESERVE`).
+- Antes de cada ronda de corrección se revisa que quede al menos un ciclo completo, es decir `LLM_CYCLE_SECONDS` (12 s) más el timeout de pytest, si no alcanza se salta directo a la poda.
+- El timeout de pytest no es fijo, se calibra con lo que tardó el setup en esa máquina (`SLOW_ENV_FACTOR` = 8 veces el setup, acotado entre `PYTEST_TIMEOUT_MIN` 20 s y `PYTEST_TIMEOUT_MAX` 90 s) y si pytest se corta antes de terminar el primer test se duplica, esto nació de correr en WSL donde pytest tardaba 20 s y el agente creía que los test estaban colgados.
+- Cosmic-ray usa lo que sobra con tope de 100 s (`MAX_MUTATION_SECONDS`) y no parte si quedan menos de 8 s (`MIN_MUTATION_SECONDS`), si no alcanza a terminar se queda con la muestra aleatoria de mutantes que alcanzó.
+- Con el LLM cada intento tiene 35 s de tope y un watchdog de 9 s sin recibir nada, hasta 8 intentos por llamada mientras queden más de 10 s, tras un timeout se reintenta al tiro (0.5 s) y tras un 503 se espera 1, 2, 4 y luego 4 s fijo.
+- Rondas de corrección: `MAX_REPAIR_ROUNDS` = 3 con temperaturas 0.3 / 0.6 / 0.8, cada ronda solo se acepta si mejora la anterior (verde > rojo > no compila, y a igualdad más test pasando).
 
-### Presupuestos de tiempo actuales
+### Prompt:
+Todos los prompts se decidieron hacer en inglés por que el código python generado es de mejor calidad
+- Generación: entra el código obetivo completo, su sketch de dependencias y data del entorno (python 3.14), se priorizan las instrucciones en orden del prompt, es decir primero, todo debe pasar contra el código tal como esta, luego que se debe cubrir toda función pública, todas las ramas de los ifs y loops y cada raise, finalmente que las aserciones sean exactas (mucha aserción tipo is not None, generaban problemas despues con mutantes).
+Reparación: entra el códgio objetivo con un tag de que no puede cambiarse, el modulo de test completos y los primeros 5 fallos de pytest (un promedio de errores de las clases públicas más cortas al inicio), máximo 900 carácteres de traceback. Las instrucciones incluyen no tocar test que pasan, los valores esperados deben leerse del código no de como "debería" comportarse, borrar un test antes de hacerlo trivial (clave), devolver el archivo completo. La temperatura aumenta para evitar respuestas parecidas entre llamadas.
+- Mejora de cobertura, entra el código objetivo, los test actuales y las lista de líneas que el coverage marcó sin ejecutar. Pide solo funciones nuevas que ejecuten esas lineas, no resescribir nada y que vayan al final, si algo falla se revierte todo.
 
-Todas cambiables y discutibles, en mi compu se corren bien
-Reloj único: 240 s desde que parte main
+### Oportunidades de mejora
+Evidentemente el enfoque en este caso no fue hacer la ejor suite de test sino que hacer un suite de test decente y válida, esto considerando el contexto de la rubrica y el enfoque de partir con algo bueno. Considerando esto, cabe destacar que nos dimos cuenta que comenzar de bases solidas hacem que luego mejorar el código sea más fácil, por ende decidimos mantener el objetivo. Algunas oportunidades de mejora pueden ser:
+- Un oraculo por ejecución. El error más típico era cuando el LLM intentaba adivinar un valor esperado, esto podría mejorarse haciendo que el modelo solo proponga las entradas y el agente ejecute código para saber exactamente los valores esperados, de esta manera las aserciones quedan exactas.
+- Mejorar poda: actualmente la poda es un método de defensa, es cuando creemos que el LLM ya no logrará solucionar los problemas, considerando que es rápido y dentro del agente (no depende de LLM), se podría podar copias del código e ir probando coberturas, de pasar el margen podemos aceptar que avance de fase lo que ahorra llamadas (bajo presión de tiempo puede funcionar).
+- Cambio de enfoque a generación por función y no por archivo, eso da prompts más chicos y menos contaminación cruzada, si se logra paralelizar correctamente es una gran oportunidadd (aumentaría muchisismo las llamadas)
 
-| Qué                                                          | Valor           | Dónde                                          |
-| ------------------------------------------------------------ | --------------- | ---------------------------------------------- |
-| total | 240 s | `BUDGET_SECONDS` |
-| Reservado para escribir                                      | 8 s             | `FINALIZE_RESERVE`                             |
-| Mínimo para intentar otra ronda de reparación (LLM + pytest) | 12 s + timeout de pytest | `LLM_CYCLE_SECONDS` |
-| Rondas max | 3 | `MAX_REPAIR_ROUNDS` |
-| Temperatura: generación / reparación 1 / 2 / 3 | 0.3 / 0.3 / 0.6 / 0.8 | `REPAIR_TEMPERATURES` |
-| Cosmic-ray: tope y mínimo | 100 s / 8 s | `MAX_MUTATION_SECONDS`, `MIN_MUTATION_SECONDS` |
-
-**Llamadas LLM** :
-
-| Qué                                               | Valor                                   |
-| ------------------------------------------------- | --------------------------------------- |
-| Watchdog: claude dijo esto entre chunks           | 9 s                                     |
-| Tope total por llamada                            | 35 s (y `X-Server-Timeout` = 35)        |
-| Intentos máximos por llamada | 8 |
-| Mínimo de tiempo restante para iniciar un intento | 10 s                                    |
-| Espera tras timeout / tras 429 o 5xx | 0.5 s / 1, 2, 4 s y luego 4 s fijo (+ 0 a 0.4 s de azar) |
-| Códigos HTTP que se reintentan                    | 408, 429, 500, 502, 503, 504            |
-| Tokens de salida máximos                          | 6000                                    |
-
-**Prompts** (`prompts.py`): código objetivo completo; sketch de dependencias hasta 3500 caracteres; en reparación, los primeros 5 fallos con traceback de hasta 900 caracteres; cantidad sugerida de tests = 2 por def, entre 8 y 40.
-
-**Herramientas** (`runners.py`, `extractor.py`):
-
-| Qué                                                      | Valor                              |
-| -------------------------------------------------------- | ---------------------------------- |
-| pytest de validación (calibrado: 8 × tiempo de setup, entre 20 y 90 s; se duplica si se corta antes del primer test) | 20 s en máquina rápida |
-| coverage | máx(45 s, 2.5 × timeout de pytest) |
-| cosmic-ray: timeout por corrida de tests de cada mutante | máx(5 s, timeout de pytest / 2) |
-| cosmic-ray: `init`                                       | mínimo entre 40 s y el presupuesto |
-| cosmic-ray: espera tras SIGINT antes de matar            | 5 s                                |
-| Prueba de import en subproceso                           | 20 s                               |
-
-Tiempos medidos (2026-09-22): llamada al LLM en buen clima 5 a 10 s; pytest de un archivo verde 0.2 a 0.6 s; coverage 0.3 s; un mutante 0.17 a 0.43 s.
-
-### Consideraciones claude
-
-- `agent.py` recibe exactamente 2 parámetros: ruta del archivo objetivo y carpeta de salida. No hay `project_folder`; la carpeta del proyecto se deduce como el directorio padre del archivo, y la raíz (`Public_Proyects/`) como el padre de esa.
-- El archivo de test se llama `test_<nombre_archivo_sin_.py>.py` (ej. `test_string_processing.py`), sin importar cuántas clases tenga el archivo.
-- Los evaluadores corren pytest **desde** `Results/<proyecto>/<archivo>/`. Por eso el test lleva una cabecera generada por el agente que sube desde su propia ubicación (y desde el cwd como respaldo) hasta encontrar `Public_Proyects/<proyecto>/`, y agrega esa carpeta y la raíz a `sys.path`. No dependemos de `PYTHONPATH` ni de rutas absolutas.
-- `agent.py` calcula y escribe `metrics.json` (`line_coverage`, `branch_coverage`, `mutation_score`). Es responsabilidad del agente, no de un harness externo.
-- Solo `google-genai` con `gemini-3.1-flash-lite`.
-- Un 503 es cola de alta demanda: se reintenta con backoff. Un 504 hay que evitarlo: prompts acotados y timeout propio más corto que el del gateway.
-- Presupuesto duro de 2 minutos por corrida, incluyendo LLM, pytest, coverage y cosmic-ray.
-- Un test trivial (o inexistente) no da puntaje. El respaldo de emergencia existe solo para que el archivo compile; el puntaje real depende de que el camino con LLM funcione.
-- Se puede modificar `run_all.sh`. Ya está corregido el typo `tabeformat.py` → `tableformat.py` y usa `${PYTHON:-python3}` para poder apuntar al venv de Python 3.14.
-- **Watchdog de streaming:** las llamadas usan streaming. El timeout del SDK (≈12 s) actúa como máximo silencio entre chunks (incluido el primero), y un reloj propio corta la llamada completa a los ≈35 s. Ante corte, 429 o 5xx se reintenta con backoff acotado por el tiempo restante.
-- **Imports deterministas:** el agente prueba en un subproceso si el módulo se importa como paquete (`blackjack.dealer`) o plano (`dealer`) y le dice al LLM la línea exacta de import. El LLM tiene prohibido tocar `sys.path`; si lo hace, esas líneas se eliminan al ensamblar el archivo.
-- **Cosmic-ray (pieza 3, medido 2026-09-22):** toml generado por corrida con `module-path` apuntando solo al archivo objetivo (el toml base tiene formato obsoleto para cosmic-ray 8.7 y con `module-path = "."` mutaría todo). `init` lista los mutantes; `exec` se lanza con `Popen` y se corta al agotarse el presupuesto. Mediciones: `blackjack/dealer.py` genera 28 mutantes a 0.17 s cada uno; `svm/svm.py` genera 584 a 0.43 s cada uno (≈4 min completo), así que en 30 a 40 s se evalúan 60 a 90 mutantes. Como cosmic-ray entrega los pendientes con `ORDER BY random()`, los completados al cortar son una muestra aleatoria. Score como `cr-report`: `1 - survived / completados`. El `test-command` usa pytest `-x` para que los mutantes muertos cuesten menos.
-- **Corte con SIGINT y snapshot del objetivo (desviación justificada del "sin snapshots").** Comprobado en la primera prueba: cortar `exec` con timeout de `subprocess.run` (SIGKILL) o con SIGTERM deja el archivo objetivo **mutado en disco**, porque el `finally` de cosmic-ray no corre. Solo SIGINT (`KeyboardInterrupt`) lo restaura. Por eso el corte es con SIGINT, y además se guardan los bytes del objetivo antes y se restauran si el hash cambió. Modificar los proyectos públicos viola una regla del enunciado, así que esta red de seguridad no es opcional.
-- Si no queda presupuesto para cosmic-ray (menos de 8 s), se reporta `mutation_score = 0.0` y queda registrado en la bitácora. `metrics.json` mantiene estrictamente las 3 llaves; el detalle (mutantes totales, completados, si fue muestra) va en `.agent_work/metrics_detail.json`.
-- **Módulos:** `agent.py` (orquestador), `extractor.py` (contexto e imports), `llm.py` (cliente con watchdog y reintentos), `runners.py` (pytest, coverage, cosmic-ray), `prompts.py` (plantillas).
-
-### Ambigüedades pendientes
-
-- Nuestro `mutation_score` es una estimación muestreada; el evaluador probablemente corre cosmic-ray completo. No van a coincidir exactamente.
-- `branch_coverage` cuando el archivo no tiene ramas: reportamos 1.0 (0 de 0 ramas sin cubrir). Coverage lo reportaría distinto.
-- El enunciado dice `Resultados/`, el `.sh` usa `Results/`. Usamos lo que diga el segundo parámetro.
-- Límites de tasa de la API sin cifras. Con ≤ 55 s de LLM son 4 a 5 llamadas por corrida más los 5 s de pausa del `.sh`.
-
-### Como usar servicio de logs que hizo claude run_log.json
-
-El summary es una fila por corrida, pensado para agregarse sobre los 20 archivos:
-
-- outcome: por qué camino se llegó al archivo final. Valores: green_first_shot (verde sin reparar), green_after_repair (verde tras 1 o 2 rondas), green_after_prune (hubo que borrar tests), emergency (nada funcionó, test de respaldo).
-- repair_rounds: cuántas rondas de reparación se usaron (0 a 2).
-- pruned_tests: nombres de los tests eliminados por la poda.
-- tests_passed: tests en el archivo final.
-- llm_calls: llamadas exitosas al modelo. Los intentos fallidos no cuentan aquí, están en los eventos.
-- mutants_completed, mutants_total, mutation_sampled: cuántos mutantes se evaluaron de cuántos existen, y si fue muestra parcial.
-- total_seconds: duración de la corrida.
-
-Los events son la línea de tiempo. Cada uno tiene t (segundos desde el inicio) y kind. Los tipos:
-
-- setup: estilo de import detectado, nombres públicos, tamaño del sketch.
-- generate, repair1, repair2: se envía un prompt. Trae prompt_chars y temperature.
-- llm_done: llegó respuesta. Trae attempts (intentos hasta el éxito), latency (segundos totales incluidos los reintentos), first_token (segundos hasta el primer chunk del intento exitoso), out_tokens, finish (STOP es normal; MAX_TOKENS sería respuesta cortada) y events, la lista de intentos fallidos con su causa (ReadTimeout es el watchdog; HTTP 503 sería alta demanda).
-- llm_error: se agotaron los intentos o no quedaba tiempo.
-- validate: resultado de pytest tras cada escritura. Trae stage (qué versión se validó), ok, passed, failed, collection_error (true si ni siquiera se pudo importar el archivo) y secs.
-- repair_worse: la reparación no mejoró y se descartó.
-- repair_skip: no quedaba tiempo para otra ronda.
-- prune: tests eliminados, con sus nombres en detail.
-- emergency: se escribió el test de respaldo.
-- measure: cobertura de líneas y ramas, y cuántas líneas quedaron sin cubrir.
-- mutate y mutate_done: presupuesto asignado a cosmic-ray, y luego score, completados sobre total, muertos, sobrevivientes, incompetentes, si fue muestra y segundos usados.
-- mutate_skip: no quedaba presupuesto mínimo (8 s).
-- warning: algo anómalo pero no fatal, por ejemplo que hubo que restaurar el archivo objetivo.
-- finalize: cierre con outcome, tests, rondas y tiempo total.
-
-Para el análisis de "iteraciones promedio" del video, las dos cuentas directas son: promedio de repair_rounds sobre los 20 archivos, y distribución de outcome. Para el análisis de la API: suma de attempts menos suma de llm_calls da los intentos perdidos, y la diferencia entre latency y first_token en cada llm_done muestra cuánto costaron los reintentos.
+## 2. Desafíos técnicos
+En resúmen todos los desafíos se centran en que el modelo no ejecuta código y los test están para ver y controlar una ejecución, para ver una aserción se debe ejecutar código y comparar con algo, si no se puede ejecutar el modelo debe predecir desde el texto.
+Como mencionamos el mayor error del LLM siempre fue en aserciones inventadas, en general aserciones tipo ==, esto genera problemas desde la creación de la primera suite, ya que a la hora de intentar arreglarlo el modelo debe revisar el error y volver a hacer una predicción del mimso contexto, lo que pocas veces cambia (razona de casi la misma manera), por eso cuando cae en ese tipo de error muchas veces termina podandose ese test.
+Otro error que apareció recurrentemente fueron los problemas con entornos de ejecución, esto no era del modelo, sin de estandarizat como estan organizados los paquetes, las carpetas y las clases por proyecto, si todo estuviera exactamente estandarizado la primera parte de preparar el primer prompt sería más fácil, esto hay que considerarlo en el agente total. Otros errores externos al LLM son de integraciones, pueden haver errores por ejemplo por el lado de cosmic-ray o que la API del modelo este lenta/saturada.
